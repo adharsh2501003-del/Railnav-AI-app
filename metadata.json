@@ -1,0 +1,6 @@
+{
+  "name": "RailNav AI",
+  "description": "Smart full-stack indoor railway station navigation with interactive SVG maps, live train cards, AI voice assistance, multi-floor wayfinding, accessibility, and SOS support.",
+  "requestFramePermissions": ["geolocation", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
