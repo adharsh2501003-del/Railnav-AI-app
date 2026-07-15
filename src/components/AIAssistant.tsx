@@ -4,13 +4,15 @@ import {
   Square, Volume2, AlertCircle, HelpCircle, Loader2 
 } from 'lucide-react';
 import { ChatMessage } from '../types';
+import { STATION_DESTINATIONS, StationDestination } from '../data';
 
 interface AIAssistantProps {
   isDarkMode: boolean;
   onNavigateToFacility: (facilityId: string) => void;
+  onNavigateToPlace?: (place: StationDestination) => void;
 }
 
-export default function AIAssistant({ isDarkMode, onNavigateToFacility }: AIAssistantProps) {
+export default function AIAssistant({ isDarkMode, onNavigateToFacility, onNavigateToPlace }: AIAssistantProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'msg-init',
@@ -181,6 +183,62 @@ export default function AIAssistant({ isDarkMode, onNavigateToFacility }: AIAssi
                   : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-300 rounded-tl-none shadow-sm'
               }`}>
                 {msg.text}
+
+                {/* Map option shortcut cards within the chat box bubble */}
+                {!isUser && (() => {
+                  const matched = STATION_DESTINATIONS.filter(dest => {
+                    const normalizedText = msg.text.toLowerCase();
+                    if (normalizedText.includes(dest.label.toLowerCase())) return true;
+                    return dest.keywords.some(kw => {
+                      if (kw.length <= 3) {
+                        const regex = new RegExp(`\\b${kw}\\b`, 'i');
+                        return regex.test(msg.text);
+                      }
+                      return normalizedText.includes(kw);
+                    });
+                  });
+
+                  if (matched.length === 0) return null;
+
+                  return (
+                    <div className="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-1.5 animate-fadeIn">
+                      <p className="text-[9px] font-black text-blue-600 dark:text-blue-400 tracking-wider uppercase flex items-center gap-1">
+                        <Compass className="w-3 h-3 animate-spin" style={{ animationDuration: '8s' }} />
+                        Map Option available
+                      </p>
+                      <div className="flex flex-col gap-1.5">
+                        {matched.map((place, pIdx) => (
+                          <button
+                            key={pIdx}
+                            id={`btn-chat-map-link-${place.label.replace(/\s+/g, '-').toLowerCase()}`}
+                            onClick={() => {
+                              if (onNavigateToPlace) {
+                                onNavigateToPlace(place);
+                              } else {
+                                onNavigateToFacility(place.type);
+                              }
+                            }}
+                            className="w-full flex items-center justify-between p-2 rounded-xl bg-blue-50/70 dark:bg-slate-950/75 border border-blue-100 dark:border-slate-800 hover:bg-blue-100 hover:border-blue-300 dark:hover:bg-slate-800 text-left font-bold text-slate-800 dark:text-slate-200 transition cursor-pointer active:scale-98"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-6 h-6 rounded bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-sm font-bold text-[10px]">
+                                {place.floor}
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="text-[10px] font-black truncate">{place.label}</h4>
+                                <p className="text-[8px] text-slate-500 dark:text-slate-400 truncate font-medium">{place.details}</p>
+                              </div>
+                            </div>
+                            <span className="text-[9px] bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-2.5 py-1.5 rounded-lg shadow-sm shrink-0 flex items-center gap-1 transition">
+                              USE MAP ➔
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 <div className={`text-[8px] font-mono mt-1 text-right ${isUser ? 'text-emerald-200' : 'text-slate-400'}`}>
                   {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>

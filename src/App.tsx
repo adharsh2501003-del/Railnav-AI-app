@@ -30,6 +30,7 @@ export default function App() {
   // Pre-configured simulation variables for cross-screen transitions
   const [selectedMapFilter, setSelectedMapFilter] = useState<string>('');
   const [selectedMapRoute, setSelectedMapRoute] = useState<boolean>(false);
+  const [selectedMapDestination, setSelectedMapDestination] = useState<any>(null);
 
   // Accessibility State
   const [accessibility, setAccessibility] = useState<AccessibilitySettings>({
@@ -227,6 +228,7 @@ export default function App() {
               isDarkMode={isDarkMode}
               preselectedFilter={selectedMapFilter}
               preselectedRoute={selectedMapRoute}
+              preselectedDestination={selectedMapDestination}
               onStartNavigation={() => {
                 handleSpeakText("Wayfinding started. Walk forward forty meters, then take the main escalator on your left to the overbridge.");
               }}
@@ -239,7 +241,15 @@ export default function App() {
               onNavigateToFacility={(fac) => {
                 setSelectedMapFilter(fac);
                 setSelectedMapRoute(false);
+                setSelectedMapDestination(null);
                 setScreen('map');
+              }}
+              onNavigateToPlace={(place) => {
+                setSelectedMapDestination(place);
+                setSelectedMapFilter('');
+                setSelectedMapRoute(true);
+                setScreen('map');
+                handleSpeakText(`Routing you to ${place.label}. Following accessibility directions.`);
               }}
             />
           )}

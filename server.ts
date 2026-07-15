@@ -35,35 +35,99 @@ function getGeminiClient(): GoogleGenAI | null {
 function getMockResponse(prompt: string): string {
   const query = prompt.toLowerCase();
   
-  if (query.includes("platform 8") || query.includes("platform eight")) {
-    return "To reach Platform 8: From your current location near the main entry, walk straight past the main ticket counters. Take the primary escalator or the wheelchair-friendly lift up to the foot overbridge. Walk across to the signpost for Platform 8 and take the elevator/stairs down. Estimated walking time is 3 minutes (180 meters).";
+  if (query.includes("platform 5") || query.includes("five")) {
+    return "To reach Platform 5: From your current location on the Ground Floor, walk past the main ticket counters. Take the primary escalator or the wheelchair-friendly Glass Lift A. Walk across to the signpost for Platform 5 and descend. Estimated walking time is 3 minutes.";
+  }
+
+  if (query.includes("platform 4") || query.includes("four")) {
+    return "To reach Platform 4: Walk straight from the entrance along the main ground floor corridor. Platform 4 is located on the Ground Floor itself, with immediate track access. No stairs or lifts are required for this track.";
   }
   
   if (query.includes("restroom") || query.includes("washroom") || query.includes("toilet")) {
-    return "The nearest clean restroom is situated right behind Platform 2's waiting hall on the Ground Floor. There is also an accessibility-friendly, wheelchair-accessible toilet located near the Medical Room at Entry Gate A.";
+    return "The nearest clean restroom is Restroom Block A situated on the Ground Floor near the waiting hall. It is fully sanitized, includes disabled-friendly facilities, and has high-contrast sign boards.";
   }
 
   if (query.includes("lift") || query.includes("elevator") || query.includes("wheelchair") || query.includes("accessible")) {
-    return "RailNav AI Accessibility route: There are glass lifts operating at Platforms 1, 3, and 5. The nearest wheelchair ramp is next to Entry Gate A. We have updated your navigation layer to show wheelchair-friendly flat paths with zero stairs.";
+    return "For complete step-free accessibility, please use Glass Lift A on the Ground Floor, which provides wheelchair access from level GF to FF. There is also a secondary ramp available at the main gate.";
   }
 
   if (query.includes("food") || query.includes("court") || query.includes("eat") || query.includes("restaurant") || query.includes("irctc")) {
-    return "The main IRCTC Food Court is located on the First Floor (Mezzanine Level) above Platform 1. You can find popular options like Nescafe, Jan Ahaar, and local sweet stalls. An express snack kiosk is also present at Platform 4.";
+    return "The primary dining facility is the IRCTC Food Court located on the First Floor (FF). It features Dominos, Haldirams, Coffee Kiosks, and local regional Indian breakfast foods.";
   }
 
   if (query.includes("ticket") || query.includes("counter") || query.includes("booking")) {
-    return "The unreserved ticket booking counter is at Entry Gate A (North Terminal). Reserved reservation counters are in the adjacent building to the left. The automated ticket vending machines (ATVMs) are also available near Platforms 1 and 4.";
+    return "Unreserved ticket bookings can be purchased at Ticket Counter North on the Ground Floor. There are 8 active counters open with a queue status monitor to speed up check-in.";
   }
 
-  if (query.includes("exit") || query.includes("out") || query.includes("gate")) {
-    return "There are two major exit corridors: Exit Gate A (leads to the main metro station link and pre-paid auto stand) and Exit Gate B (leads to the east city side parking). Exit Gate A is closest to your current position (approx. 50 meters away).";
+  if (query.includes("atm") || query.includes("cash") || query.includes("money")) {
+    return "A State Bank ATM is fully active on the Ground Floor near the exit gates. It supports cash withdrawals and is open 24/7.";
   }
 
-  if (query.includes("sos") || query.includes("emergency") || query.includes("police") || query.includes("doctor")) {
-    return "⚠️ EMERGENCY ALERT: The Railway Protection Force (RPF) booth is located on Platform 1, next to the Station Master's office. The Medical Clinic is beside the main waiting room. You can trigger the SOS button in the emergency panel to directly call our emergency helpline numbers (139 or 112).";
+  if (query.includes("waiting") || query.includes("lounge")) {
+    return "We have two main waiting halls: the General Waiting Room located on the Ground Floor (GF), and the premium Executive VIP Lounge located on the First Floor (FF) with luxury sofa seating and refreshments.";
   }
 
-  return "I'm RailNav AI, your station guide. I can help you find platforms (e.g., 'Platform 8'), clean restrooms, IRCTC food courts, lifts/escalators, and help with wheelchair-friendly paths. What station facility can I help you find right now?";
+  if (query.includes("charge") || query.includes("charging")) {
+    return "To charge your electronic devices, navigate to Charging Point Station B located on the First Floor (FF), which provides 6 high-speed USB power docks and multi-pin plugs.";
+  }
+
+  if (query.includes("stair") || query.includes("stairs") || query.includes("escalator")) {
+    return "To travel between levels, use the Platform 6 Stairs which has an adjacent escalator running upwards continuously, located on the First Floor (FF).";
+  }
+
+  if (query.includes("water") || query.includes("drinking")) {
+    return "A cold RO drinking water kiosk is available at the Water Purifier Station located on the First Floor (FF), providing free pure drinking water.";
+  }
+
+  if (query.includes("police") || query.includes("rpf") || query.includes("security") || query.includes("sos") || query.includes("emergency")) {
+    return "⚠️ EMERGENCY ASSISTANCE: The Railway Police Office (RPF booth) is located on the Second Floor (SF), providing 24/7 security assistance. You can also dial 139 for central railway helpline.";
+  }
+
+  if (query.includes("dormitory") || query.includes("dormitories") || query.includes("sleeping") || query.includes("bed")) {
+    return "Clean sleeping berths can be booked at the Resting Dormitories located on the Second Floor (SF). Options include both AC deluxe and non-AC single beds.";
+  }
+
+  if (query.includes("lost") || query.includes("found") || query.includes("missing") || query.includes("baggage")) {
+    return "If you lost any item or baggage, report it immediately to the Lost & Found Center located on the Second Floor (SF).";
+  }
+
+  return "I'm RailNav AI, your station guide. I can help you find Platform 5, Platform 4, Restroom Block A, IRCTC Food Court, Ticket Counter North, State Bank ATM, General Waiting Room, Executive VIP Lounge, and security centers. What can I find for you?";
+}
+
+// Resilient Gemini generator with auto-retry and fallback model support
+async function generateWithFallback(ai: GoogleGenAI, message: string, systemPrompt: string): Promise<string> {
+  // Try preferred model, then secondary free tier model if first is unavailable/overloaded
+  const modelsToTry = ["gemini-3.5-flash", "gemini-3.1-flash-lite"];
+  let lastError: any = null;
+
+  for (const model of modelsToTry) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        console.log(`Attempting Gemini generation with model "${model}" (attempt ${attempt}/2)`);
+        const response = await ai.models.generateContent({
+          model: model,
+          contents: message,
+          config: {
+            systemInstruction: systemPrompt,
+            temperature: 0.7,
+          },
+        });
+        
+        if (response && response.text) {
+          console.log(`Success using model "${model}" on attempt ${attempt}`);
+          return response.text;
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`Attempt ${attempt} with model "${model}" failed with: ${err?.message || err}`);
+        if (attempt < 2) {
+          // Quick sleep before retrying
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+    }
+  }
+  throw lastError || new Error("All Gemini generation attempts failed");
 }
 
 // API Routes
@@ -91,16 +155,8 @@ If the user asks about platforms, give realistic instructions: "Take the main es
 If they ask for lifts, escalators, or restrooms, explain their locations (e.g. near the waiting hall or platforms). Always highlight accessibility options (lifts, ramps, tactile paths) if relevant.
 Avoid dry or technical code references. Keep all responses friendly, humble, and practical for travelers who are carrying heavy luggage, traveling with seniors, or in a rush.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: message,
-      config: {
-        systemInstruction: systemPrompt,
-        temperature: 0.7,
-      },
-    });
-
-    res.json({ text: response.text });
+    const text = await generateWithFallback(ai, message, systemPrompt);
+    res.json({ text });
   } catch (error: any) {
     console.error("Gemini API Error, falling back to local engine:", error);
     // Fallback on failure

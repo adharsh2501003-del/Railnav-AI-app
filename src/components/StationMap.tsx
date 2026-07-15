@@ -3,12 +3,20 @@ import {
   MapPin, Layers, Compass, ZoomIn, ZoomOut, ArrowRight, Eye, 
   EyeOff, RefreshCw, Sparkles, Navigation, AlertCircle, CheckCircle
 } from 'lucide-react';
+import { STATION_DESTINATIONS } from '../data';
 
 interface StationMapProps {
   isDarkMode: boolean;
   preselectedFilter?: string;
   preselectedRoute?: boolean;
   onStartNavigation: () => void;
+  preselectedDestination?: {
+    label: string;
+    x: number;
+    y: number;
+    details: string;
+    floor: string;
+  } | null;
 }
 
 export default function StationMap({
@@ -16,6 +24,7 @@ export default function StationMap({
   preselectedFilter = '',
   preselectedRoute = false,
   onStartNavigation,
+  preselectedDestination = null,
 }: StationMapProps) {
   const [currentFloor, setCurrentFloor] = useState('GF'); // 'GF' | 'FF' | 'SF'
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -25,6 +34,21 @@ export default function StationMap({
   const [showCrowdHeatmap, setShowCrowdHeatmap] = useState(false);
   const [navigationActive, setNavigationActive] = useState(preselectedRoute);
   const [mapCenter, setMapCenter] = useState({ x: 0, y: 0 });
+
+  // Currently selected starting position for dynamic routing
+  const [startLocation, setStartLocation] = useState<{
+    label: string;
+    x: number;
+    y: number;
+    details: string;
+    floor: string;
+  }>({
+    label: 'Ticket Counter North',
+    x: 60,
+    y: 260,
+    details: '8 windows open',
+    floor: 'GF'
+  });
 
   // Currently selected wayfinding target destination
   const [selectedDestination, setSelectedDestination] = useState<{
@@ -46,13 +70,176 @@ export default function StationMap({
   const [navPlaying, setNavPlaying] = useState(true);
   const [bottomSheetMinimized, setBottomSheetMinimized] = useState(false);
 
-  // Auto trigger minimization if starting navigation with a preselected route
+  // Unique and dynamic wayfinding route generator with exactly 3 intermediate checkpoints
+  const getPathPoints = () => {
+    const S = startLocation;
+    const D = selectedDestination;
+
+    if (S.label === D.label) {
+      return [
+        { x: S.x, y: S.y, floor: S.floor, label: `Start (${S.label})` },
+        { x: S.x, y: S.y, floor: S.floor, label: 'Checkpoint 1' },
+        { x: S.x, y: S.y, floor: S.floor, label: 'Checkpoint 2' },
+        { x: S.x, y: S.y, floor: S.floor, label: 'Checkpoint 3' },
+        { x: S.x, y: S.y, floor: S.floor, label: `Arrived (${D.label})` }
+      ];
+    }
+
+    if (S.floor === D.floor) {
+      const floor = S.floor;
+      let mainY = 220;
+      if (floor === 'FF') mainY = 180;
+      if (floor === 'SF') mainY = 200;
+
+      const c1X = S.x;
+      const c1Y = mainY;
+      const c1Label = `Exit Corridor near ${S.label}`;
+
+      const c2X = Math.round((S.x + D.x) / 2);
+      const c2Y = mainY;
+      let c2Label = `${floor} Central Concourse`;
+      if (floor === 'GF') {
+        if (c2X > 200) c2Label = 'GF East Junction';
+        else if (c2X < 120) c2Label = 'GF West Junction';
+        else c2Label = 'GF Main Concourse Crossing';
+      } else if (floor === 'FF') {
+        c2Label = 'FF Mezzanine Walkway';
+      } else if (floor === 'SF') {
+        c2Label = 'SF Command Foyer';
+      }
+
+      const c3X = D.x;
+      const c3Y = mainY;
+      const c3Label = `Approach Corridor near ${D.label}`;
+
+      return [
+        { x: S.x, y: S.y, floor: floor, label: `Start (${S.label})` },
+        { x: c1X, y: c1Y, floor: floor, label: c1Label },
+        { x: c2X, y: c2Y, floor: floor, label: c2Label },
+        { x: c3X, y: c3Y, floor: floor, label: c3Label },
+        { x: D.x, y: D.y, floor: floor, label: D.label }
+      ];
+    } else {
+      const transX = 210;
+      const transY = 160;
+      const transName = 'Glass Lift A';
+
+      const c1X = S.x;
+      const c1Y = transY;
+      const c1Label = `Exit Lobby near ${S.label}`;
+
+      const c2X = transX;
+      const c2Y = transY;
+      const c2Label = `${transName} Boarding (${S.floor})`;
+
+      const c3X = transX;
+      const c3Y = transY;
+      const c3Label = `${transName} Landing (${D.floor})`;
+
+      return [
+        { x: S.x, y: S.y, floor: S.floor, label: `Start (${S.label})` },
+        { x: c1X, y: c1Y, floor: S.floor, label: c1Label },
+        { x: c2X, y: c2Y, floor: S.floor, label: c2Label },
+        { x: c3X, y: c3Y, floor: D.floor, label: c3Label },
+        { x: D.x, y: D.y, floor: D.floor, label: D.label }
+      ];
+    }
+  };
+
+  const getSimulatedUserPosition = (progress: number) => {
+    const points = getPathPoints();
+    let activePointIndex = 0;
+    let segmentProgress = 0;
+
+    if (progress <= 25) {
+      activePointIndex = 0;
+      segmentProgress = progress / 25;
+    } else if (progress <= 50) {
+      activePointIndex = 1;
+      segmentProgress = (progress - 25) / 25;
+    } else if (progress <= 75) {
+      activePointIndex = 2;
+      segmentProgress = (progress - 50) / 25;
+    } else {
+      activePointIndex = 3;
+      segmentProgress = Math.min(1, (progress - 75) / 25);
+    }
+
+    const p1 = points[activePointIndex];
+    const p2 = points[activePointIndex + 1];
+
+    const userFloor = segmentProgress < 0.5 ? p1.floor : p2.floor;
+
+    return {
+      x: p1.x + (p2.x - p1.x) * segmentProgress,
+      y: p1.y + (p2.y - p1.y) * segmentProgress,
+      floor: userFloor
+    };
+  };
+
+  const userPos = navigationActive ? getSimulatedUserPosition(navProgress) : { x: startLocation.x, y: startLocation.y, floor: startLocation.floor };
+
+  // Capture current passenger position dynamically
+  const getCurrentPassengerPosition = () => {
+    if (navProgress >= 98) {
+      return selectedDestination;
+    }
+    const pos = getSimulatedUserPosition(navProgress);
+    const matched = STATION_DESTINATIONS.find(d => {
+      if (d.floor !== pos.floor) return false;
+      const dx = d.x - pos.x;
+      const dy = d.y - pos.y;
+      return Math.sqrt(dx * dx + dy * dy) < 25;
+    });
+    if (matched) {
+      return {
+        label: matched.label,
+        x: matched.x,
+        y: matched.y,
+        details: matched.details,
+        floor: matched.floor
+      };
+    }
+    return {
+      label: 'Your Current Position',
+      x: Math.round(pos.x),
+      y: Math.round(pos.y),
+      details: 'Current passenger position',
+      floor: pos.floor
+    };
+  };
+
+  // Select new wayfinding destination starting from the passenger's actual current location
+  const handleSelectNewDestination = (newDest: typeof selectedDestination) => {
+    const passengerLoc = getCurrentPassengerPosition();
+    setStartLocation(passengerLoc);
+    setSelectedDestination(newDest);
+    setCurrentFloor(passengerLoc.floor);
+    setNavigationActive(false);
+    setNavProgress(0);
+    setNavPlaying(true);
+  };
+
+  // Auto trigger minimization if starting navigation with a preselected route or synced destination
   useEffect(() => {
-    if (preselectedRoute) {
+    if (preselectedDestination) {
+      const passengerLoc = getCurrentPassengerPosition();
+      setStartLocation(passengerLoc);
+      setSelectedDestination(preselectedDestination);
+      setCurrentFloor(passengerLoc.floor);
+      setNavigationActive(preselectedRoute);
+      setNavProgress(0);
+      setNavPlaying(true);
+      if (preselectedRoute) {
+        setBottomSheetMinimized(true);
+      } else {
+        setBottomSheetMinimized(false);
+      }
+    } else if (preselectedRoute) {
       setNavigationActive(true);
       setBottomSheetMinimized(true);
     }
-  }, [preselectedRoute]);
+  }, [preselectedDestination, preselectedRoute]);
 
   // Turn-by-turn simulation loop - halts precisely when reaching 100%
   useEffect(() => {
@@ -62,6 +249,7 @@ export default function StationMap({
         setNavProgress(prev => {
           if (prev >= 100) {
             setNavPlaying(false); // Stop simulation play state at destination
+            setStartLocation(selectedDestination);
             return 100; // Stop precisely at reached location
           }
           return prev + 1; // 1% increment
@@ -69,68 +257,67 @@ export default function StationMap({
       }, 150);
     }
     return () => clearInterval(timer);
-  }, [navigationActive, navPlaying]);
+  }, [navigationActive, navPlaying, selectedDestination]);
 
-  // Dynamic Wayfinding path calculation from Start (90, 220) to chosen destination (destX, destY)
-  const startX = 90;
-  const startY = 220;
-
-  const getPathPoints = () => {
-    const destX = selectedDestination.x;
-    const destY = selectedDestination.y;
-
-    // Check if on a different floor or if we need standard path grid structure:
-    // We walk horizontally along Y=220, turn towards target, walk vertically, then straight to destination.
-    const turnX = destX > 150 ? 210 : (destX < 90 ? 60 : destX);
-
-    return [
-      { x: startX, y: startY, label: 'Start (Ticket Counter)' },
-      { x: Math.round((startX + turnX) / 2), y: startY, label: 'Central Corridor' },
-      { x: turnX, y: startY, label: 'Transit Intersection' },
-      { x: turnX, y: Math.round((startY + destY) / 2), label: 'Wayfinding Junction' },
-      { x: destX, y: destY, label: selectedDestination.label }
-    ];
-  };
-
-  const getSimulatedUserPosition = (progress: number) => {
-    const points = getPathPoints();
-    // Segmented linear interpolation based on progress % (4 equal segments of 25% each)
-    if (progress <= 25) {
-      const p = progress / 25;
-      return {
-        x: points[0].x + (points[1].x - points[0].x) * p,
-        y: points[0].y + (points[1].y - points[0].y) * p
-      };
-    } else if (progress <= 50) {
-      const p = (progress - 25) / 25;
-      return {
-        x: points[1].x + (points[2].x - points[1].x) * p,
-        y: points[1].y + (points[2].y - points[1].y) * p
-      };
-    } else if (progress <= 75) {
-      const p = (progress - 50) / 25;
-      return {
-        x: points[2].x + (points[3].x - points[2].x) * p,
-        y: points[2].y + (points[3].y - points[2].y) * p
-      };
-    } else {
-      const p = Math.min(1, (progress - 75) / 25);
-      return {
-        x: points[3].x + (points[4].x - points[3].x) * p,
-        y: points[3].y + (points[4].y - points[3].y) * p
-      };
+  // Synchronize current map floor with simulated user position floor
+  useEffect(() => {
+    if (navigationActive) {
+      const pos = getSimulatedUserPosition(navProgress);
+      if (pos.floor !== currentFloor) {
+        setCurrentFloor(pos.floor);
+      }
     }
+  }, [navProgress, navigationActive]);
+
+  // Construct SVG path string for segments located strictly on the specified floor
+  const getSVGPathD = (floor: string) => {
+    const points = getPathPoints();
+    let d = '';
+    let inFloor = false;
+    for (let i = 0; i < points.length; i++) {
+      const pt = points[i];
+      if (pt.floor === floor) {
+        if (!inFloor) {
+          d += `M ${pt.x},${pt.y}`;
+          inFloor = true;
+        } else {
+          d += ` L ${pt.x},${pt.y}`;
+        }
+      } else {
+        inFloor = false;
+      }
+    }
+    return d;
   };
 
-  const userPos = navigationActive ? getSimulatedUserPosition(navProgress) : { x: startX, y: startY };
+  // Dynamically calculate actual pathway distance in scaled meters
+  const getRouteDistance = () => {
+    const points = getPathPoints();
+    let distPx = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      if (p1.floor !== p2.floor) {
+        distPx += 40; // Floor transition virtual distance (approx. 40m)
+      } else {
+        const dx = p1.x - p2.x;
+        const dy = p1.y - p2.y;
+        distPx += Math.sqrt(dx * dx + dy * dy);
+      }
+    }
+    return Math.max(10, Math.round(distPx * 1.1)); // Scaled meters
+  };
 
   // HUD directions mapping based on navigation progress percentage and dynamically requested landmarks
   const getNavigationInstruction = (progress: number) => {
     const points = getPathPoints();
+    const S = startLocation;
+    const D = selectedDestination;
+
     if (progress >= 100) {
       return {
-        text: `Arrived at ${selectedDestination.label}!`,
-        sub: `${selectedDestination.details} • Wayfinding Completed`,
+        text: `Arrived at ${D.label}!`,
+        sub: `${D.details} • Wayfinding Completed`,
         icon: (
           <svg className="w-5 h-5 text-emerald-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -139,7 +326,7 @@ export default function StationMap({
       };
     } else if (progress >= 75) {
       return {
-        text: `Proceed right to ${selectedDestination.label}`,
+        text: `Proceed right to ${D.label}`,
         sub: `Almost there • ${Math.round((100 - progress) * 1.5)} meters remaining`,
         icon: (
           <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -148,9 +335,20 @@ export default function StationMap({
         )
       };
     } else if (progress >= 50) {
+      if (S.floor !== D.floor) {
+        return {
+          text: `Take Elevator to ${D.floor}`,
+          sub: `Exiting at ${points[3].label}`,
+          icon: (
+            <svg className="w-5 h-5 text-white animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+            </svg>
+          )
+        };
+      }
       return {
         text: `Turn at ${points[2].label}`,
-        sub: `Heading north along the station transit bay`,
+        sub: `Heading along the station corridor concourse`,
         icon: (
           <svg className="w-5 h-5 text-white -rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
@@ -169,8 +367,8 @@ export default function StationMap({
       };
     } else {
       return {
-        text: `Departing from ${points[0].label}`,
-        sub: `Following smart path to ${selectedDestination.label}`,
+        text: `Departing from ${S.label}`,
+        sub: `Following smart path to ${D.label}`,
         icon: (
           <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -436,33 +634,6 @@ export default function StationMap({
                 <rect x="220" y="280" width="100" height="120" rx="8" className="stroke-slate-200 dark:stroke-slate-800 stroke-[1.5] fill-slate-50 dark:fill-slate-950" />
                 <text x="230" y="300" className="fill-slate-500 dark:fill-slate-400 text-[10px] font-bold">ADMIN OFFICE</text>
 
-                {/* HIGH FIDELITY GOOGLE MAPS NAVIGATION PATHWAY */}
-                {navigationActive && (
-                  <>
-                    {/* Glow outline layer */}
-                    <path 
-                      d="M 90,220 L 210,220 L 210,160 L 260,120" 
-                      className="stroke-blue-400/25 dark:stroke-blue-500/20 stroke-[10px] stroke-linecap-round stroke-linejoin-round"
-                    />
-                    {/* Main Solid Google Maps Neon Route Line */}
-                    <path 
-                      d="M 90,220 L 210,220 L 210,160 L 260,120" 
-                      className="stroke-blue-600 dark:stroke-blue-500 stroke-[5px] stroke-linecap-round stroke-linejoin-round"
-                    />
-                    {/* Google Maps Animated Dash Direction Indicators */}
-                    <path 
-                      d="M 90,220 L 210,220 L 210,160 L 260,120" 
-                      className="stroke-white stroke-[2px] stroke-linecap-round stroke-linejoin-round stroke-dasharray-[6,8] animate-maps-dash"
-                    />
-
-                    {/* Start Checkpoint Node Indicator */}
-                    <circle cx="90" cy="220" r="5" className="fill-emerald-500 stroke-white stroke-2" />
-
-                    {/* End Destination Pulse Signal */}
-                    <circle cx="260" cy="120" r="10" className="fill-rose-500/30 stroke-none animate-ping" style={{ animationDuration: '2s' }} />
-                    <circle cx="260" cy="120" r="5" className="fill-rose-600 stroke-white stroke-1.5" />
-                  </>
-                )}
               </>
             )}
 
@@ -491,50 +662,59 @@ export default function StationMap({
             )}
 
             {/* DYNAMIC HIGH FIDELITY PATHWAY OVERLAY (WORKS ON ANY FLOOR) */}
-            {navigationActive && (
-              <>
-                {/* Glow outline layer */}
-                <path 
-                  d={`M ${getPathPoints().map(p => `${p.x},${p.y}`).join(' L ')}`} 
-                  className="stroke-blue-400/25 dark:stroke-blue-500/20 stroke-[10px] stroke-linecap-round stroke-linejoin-round"
-                />
-                {/* Main Solid Google Maps Neon Route Line */}
-                <path 
-                  d={`M ${getPathPoints().map(p => `${p.x},${p.y}`).join(' L ')}`} 
-                  className="stroke-blue-600 dark:stroke-blue-500 stroke-[5px] stroke-linecap-round stroke-linejoin-round"
-                />
-                {/* Google Maps Animated Dash Direction Indicators */}
-                <path 
-                  d={`M ${getPathPoints().map(p => `${p.x},${p.y}`).join(' L ')}`} 
-                  className="stroke-white stroke-[2px] stroke-linecap-round stroke-linejoin-round stroke-dasharray-[6,8] animate-maps-dash"
-                />
+            {navigationActive && (() => {
+              const d = getSVGPathD(currentFloor);
+              if (!d) return null;
+              return (
+                <>
+                  {/* Glow outline layer */}
+                  <path 
+                    d={d} 
+                    className="stroke-blue-400/25 dark:stroke-blue-500/20 stroke-[10px] stroke-linecap-round stroke-linejoin-round fill-none"
+                  />
+                  {/* Main Solid Google Maps Neon Route Line */}
+                  <path 
+                    d={d} 
+                    className="stroke-blue-600 dark:stroke-blue-500 stroke-[5px] stroke-linecap-round stroke-linejoin-round fill-none"
+                  />
+                  {/* Google Maps Animated Dash Direction Indicators */}
+                  <path 
+                    d={d} 
+                    className="stroke-white stroke-[2px] stroke-linecap-round stroke-linejoin-round stroke-dasharray-[6,8] animate-maps-dash fill-none"
+                  />
 
-                {/* Checkpoint Node Indicators */}
-                {getPathPoints().map((pt, idx) => {
-                  const isReached = navProgress >= (idx * 25);
-                  const isCurrent = navProgress >= ((idx - 1) * 25) && navProgress < (idx * 25);
-                  return (
-                    <g key={idx}>
-                      {isCurrent && (
-                        <circle cx={pt.x} cy={pt.y} r="8" className="fill-blue-500/30 animate-pulse" />
-                      )}
-                      <circle 
-                        cx={pt.x} 
-                        cy={pt.y} 
-                        r="5.5" 
-                        className={`transition-all duration-300 stroke-white stroke-1.5 ${
-                          isReached ? 'fill-emerald-500' : 'fill-slate-400'
-                        }`} 
-                      />
-                    </g>
-                  );
-                })}
+                  {/* Checkpoint Node Indicators */}
+                  {getPathPoints().map((pt, idx) => {
+                    if (pt.floor !== currentFloor) return null;
+                    const isReached = navProgress >= (idx * 25);
+                    const isCurrent = navProgress >= ((idx - 1) * 25) && navProgress < (idx * 25);
+                    return (
+                      <g key={idx}>
+                        {isCurrent && (
+                          <circle cx={pt.x} cy={pt.y} r="8" className="fill-blue-500/30 animate-pulse" />
+                        )}
+                        <circle 
+                          cx={pt.x} 
+                          cy={pt.y} 
+                          r="5.5" 
+                          className={`transition-all duration-300 stroke-white stroke-1.5 ${
+                            isReached ? 'fill-emerald-500' : 'fill-slate-400'
+                          }`} 
+                        />
+                      </g>
+                    );
+                  })}
 
-                {/* End Destination Pulse Signal */}
-                <circle cx={selectedDestination.x} cy={selectedDestination.y} r="10" className="fill-rose-500/30 stroke-none animate-ping" style={{ animationDuration: '2s' }} />
-                <circle cx={selectedDestination.x} cy={selectedDestination.y} r="5" className="fill-rose-600 stroke-white stroke-1.5" />
-              </>
-            )}
+                  {/* End Destination Pulse Signal */}
+                  {selectedDestination.floor === currentFloor && (
+                    <>
+                      <circle cx={selectedDestination.x} cy={selectedDestination.y} r="10" className="fill-rose-500/30 stroke-none animate-ping" style={{ animationDuration: '2s' }} />
+                      <circle cx={selectedDestination.x} cy={selectedDestination.y} r="5" className="fill-rose-600 stroke-white stroke-1.5" />
+                    </>
+                  )}
+                </>
+              );
+            })()}
           </svg>
 
           {/* Crowd Heatmap Layer Overlays (Colored circles) */}
@@ -593,15 +773,13 @@ export default function StationMap({
 
                 <button 
                   onClick={() => {
-                    setSelectedDestination({
+                    handleSelectNewDestination({
                       label: marker.label,
                       x: marker.x,
                       y: marker.y,
                       details: marker.details,
                       floor: currentFloor
                     });
-                    setNavigationActive(false);
-                    setNavProgress(0);
                     setBottomSheetMinimized(false);
                   }}
                   className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-300 hover:scale-125 cursor-pointer text-left focus:outline-none"
@@ -631,7 +809,7 @@ export default function StationMap({
           })}
 
           {/* REAL-TIME SIMULATED USER NAVIGATION DOT */}
-          {currentFloor === 'GF' && (
+          {userPos.floor === currentFloor && (
             <div 
               className="absolute z-30 transition-all duration-300 ease-out"
               style={{ 
@@ -659,304 +837,342 @@ export default function StationMap({
       {/* MINIMIZABLE BOTTOM SHEET DRAWER - COLLAPSES ON WAYFINDING INITIATION */}
       <div 
         className={`absolute bottom-0 inset-x-0 bg-white dark:bg-slate-900 rounded-t-[28px] border-t border-slate-200 dark:border-slate-800 shadow-2xl z-20 flex flex-col justify-between transition-all duration-300 ${
-          bottomSheetMinimized ? 'p-3 px-4 pb-4 h-[80px]' : 'p-5 h-[280px]'
+          bottomSheetMinimized ? 'p-3 px-4 pb-4 h-[80px]' : 'p-5 h-[300px]'
         }`}
       >
-        {bottomSheetMinimized ? (
-          /* ========================================================= */
-          /* MINIMIZED NAVIGATION PANEL (Google Maps HUD)              */
-          /* ========================================================= */
-          <div className="flex flex-col h-full justify-between">
-            {/* Slide up grab bar button */}
-            <button 
-              onClick={() => setBottomSheetMinimized(false)}
-              className="w-12 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-2.5 hover:bg-slate-400 transition shrink-0 cursor-pointer"
-              title="Expand Details"
-            ></button>
+        {(() => {
+          const totalDistance = getRouteDistance();
+          const totalMinutes = Math.max(1, Math.round(totalDistance / 60));
+          const remainingDistance = Math.max(10, Math.round(totalDistance * (1 - navProgress / 100)));
+          const remainingMinutes = Math.max(1, Math.ceil(totalMinutes * (1 - navProgress / 100)));
+          const isMultiFloor = startLocation.floor !== selectedDestination.floor;
 
-            <div className="flex items-center justify-between gap-3">
-              {/* ETA remaining stats */}
-              <div className="text-left flex items-center gap-3">
-                <div className="flex flex-col">
-                  <span className="text-lg font-mono font-black text-emerald-600 dark:text-emerald-400 leading-none">
-                    {Math.max(1, Math.ceil((100 - navProgress) * 0.03))} min
-                  </span>
-                  <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase mt-1 tracking-wider">
-                    ETA: 12:48 PM
-                  </span>
-                </div>
-                <div className="w-[1px] h-8 bg-slate-200 dark:bg-slate-800"></div>
-                <div className="flex flex-col">
-                  <span className="text-xs font-black text-slate-800 dark:text-slate-200">
-                    {Math.max(10, 180 - Math.round(navProgress * 1.8))} meters
-                  </span>
-                  <span className="text-[9px] text-slate-400 dark:text-slate-500 font-semibold leading-none mt-1">
-                    via Ramp B
-                  </span>
-                </div>
-              </div>
+          return bottomSheetMinimized ? (
+            /* ========================================================= */
+            /* MINIMIZED NAVIGATION PANEL (Google Maps HUD)              */
+            /* ========================================================= */
+            <div className="flex flex-col h-full justify-between">
+              {/* Slide up grab bar button */}
+              <button 
+                onClick={() => setBottomSheetMinimized(false)}
+                className="w-12 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-2.5 hover:bg-slate-400 transition shrink-0 cursor-pointer"
+                title="Expand Details"
+              ></button>
 
-              {/* Simulation interactive controller */}
-              <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950 p-1.5 rounded-xl border border-slate-200/40 dark:border-slate-800/80">
-                <button
-                  id="btn-sim-play-pause"
-                  onClick={() => setNavPlaying(!navPlaying)}
-                  className="w-7 h-7 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 rounded-lg flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-850 active:scale-90 transition cursor-pointer"
-                  title={navPlaying ? "Pause Walking" : "Resume Walking"}
-                >
-                  {navPlaying ? (
-                    <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24">
-                      <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                    </svg>
-                  ) : (
-                    <svg className="w-3 h-3 fill-current ml-0.5" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  )}
-                </button>
-                <div className="flex flex-col px-1">
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="100" 
-                    value={navProgress} 
-                    onChange={(e) => {
-                      setNavProgress(Number(e.target.value));
-                      setNavPlaying(false); // Pause auto playback when scrubbed
-                    }}
-                    className="w-16 h-1 bg-blue-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                    title="Scrub GPS Tracker"
-                  />
-                  <span className="text-[7px] font-mono text-slate-400 dark:text-slate-500 mt-0.5 text-center font-bold uppercase tracking-widest">
-                    GPS TRACK
-                  </span>
-                </div>
-              </div>
-
-              {/* Right column navigation actions */}
-              <div className="flex items-center gap-1.5">
-                <button
-                  id="btn-expand-notif-bar"
-                  onClick={() => setBottomSheetMinimized(false)}
-                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-600 dark:text-slate-300 flex items-center justify-center transition cursor-pointer"
-                  title="Expand Route Information"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-                  </svg>
-                </button>
-
-                <button
-                  id="btn-exit-directions"
-                  onClick={() => {
-                    setNavigationActive(false);
-                    setBottomSheetMinimized(false);
-                    setNavProgress(0);
-                  }}
-                  className="h-8 px-2.5 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 hover:bg-rose-600 hover:text-white border border-rose-100 dark:border-rose-950/50 rounded-lg text-[10px] font-black transition active:scale-95 cursor-pointer"
-                >
-                  End
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* ========================================================= */
-          /* EXPANDED FULL DETAIL PANEL                                */
-          /* ========================================================= */
-          <>
-            {/* Visual drag bar */}
-            <div 
-              onClick={() => {
-                if (navigationActive) {
-                  setBottomSheetMinimized(true);
-                }
-              }}
-              className={`w-12 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-3.5 shrink-0 ${
-                navigationActive ? 'cursor-pointer hover:bg-slate-400 transition' : ''
-              }`}
-              title={navigationActive ? "Minimize Panel" : ""}
-            ></div>
-
-            {/* Heatmap Crowd Monitor Legend when activated */}
-            {showCrowdHeatmap && (
-              <div className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-[10px] font-bold mb-3 shrink-0 animate-fadeIn">
-                <span className="text-slate-500">STATION HEATMAP:</span>
-                <div className="flex gap-3">
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-green"></span> Low</span>
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-500"></span> Medium</span>
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Heavy</span>
-                </div>
-              </div>
-            )}
-
-            {/* Primary Navigation / Bottom Sheet Details */}
-            <div className="flex justify-between items-start">
-              <div className="text-left space-y-1 flex-1 pr-3">
-                <span className="text-[10px] text-blue-600 dark:text-blue-400 font-extrabold tracking-wider uppercase block">
-                  TARGET DESTINATION
-                </span>
-                <div className="relative">
-                  <select 
-                    value={selectedDestination.label}
-                    onChange={(e) => {
-                      const gfDests = [
-                        { x: 260, y: 120, label: 'Platform 5', details: 'NDLS Shatabdi Exp arriving', floor: 'GF' },
-                        { x: 100, y: 120, label: 'Platform 4', details: 'Rajdhani Exp Departing', floor: 'GF' },
-                        { x: 180, y: 220, label: 'Restroom Block A', details: 'Clean toilets, Disabled-friendly', floor: 'GF' },
-                        { x: 60, y: 260, label: 'Ticket Counter North', details: '8 windows open', floor: 'GF' },
-                        { x: 210, y: 160, label: 'Glass Lift A', details: 'Wheelchair access, Level GF to FF', floor: 'GF' },
-                        { x: 310, y: 240, label: 'State Bank ATM', details: 'Cash Available', floor: 'GF' },
-                        { x: 150, y: 320, label: 'General Waiting Room', details: 'AC waiting facilities, 200 seats', floor: 'GF' }
-                      ];
-                      const ffDests = [
-                        { x: 120, y: 160, label: 'IRCTC Food Court', details: 'Dominos, Haldirams, Coffee Kiosks', floor: 'FF' },
-                        { x: 220, y: 220, label: 'Executive VIP Lounge', details: 'Sofa seating, refreshments', floor: 'FF' },
-                        { x: 300, y: 140, label: 'Charging Point Station B', details: '6 USB power docks, multi-pin', floor: 'FF' },
-                        { x: 80, y: 100, label: 'Platform 6 Stairs', details: 'Stairs & Escalator down', floor: 'FF' },
-                        { x: 160, y: 280, label: 'Water Purifier Station', details: 'Free cold RO water', floor: 'FF' }
-                      ];
-                      const sfDests = [
-                        { x: 150, y: 150, label: 'Railway Police Office', details: 'RPF Booth, Help 24/7', floor: 'SF' },
-                        { x: 250, y: 200, label: 'Resting Dormitories', details: 'AC & Non-AC sleeping berths', floor: 'SF' },
-                        { x: 100, y: 240, label: 'Lost & Found Center', details: 'Claim missing baggage here', floor: 'SF' }
-                      ];
-                      const allDests = [...gfDests, ...ffDests, ...sfDests];
-                      const found = allDests.find(d => d.label === e.target.value);
-                      if (found) {
-                        setSelectedDestination({
-                          label: found.label,
-                          x: found.x,
-                          y: found.y,
-                          details: found.details,
-                          floor: found.floor
-                        });
-                        setCurrentFloor(found.floor);
-                        setNavigationActive(false);
-                        setNavProgress(0);
-                      }
-                    }}
-                    className="mt-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-3 py-2 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                  >
-                    <optgroup label="Ground Floor (GF)">
-                      <option value="Platform 5">Platform 5 (GF)</option>
-                      <option value="Platform 4">Platform 4 (GF)</option>
-                      <option value="Restroom Block A">Restroom Block A (GF)</option>
-                      <option value="Ticket Counter North">Ticket Counter North (GF)</option>
-                      <option value="Glass Lift A">Glass Lift A (GF)</option>
-                      <option value="State Bank ATM">State Bank ATM (GF)</option>
-                      <option value="General Waiting Room">General Waiting Room (GF)</option>
-                    </optgroup>
-                    <optgroup label="First Floor (FF)">
-                      <option value="IRCTC Food Court">IRCTC Food Court (FF)</option>
-                      <option value="Executive VIP Lounge">Executive VIP Lounge (FF)</option>
-                      <option value="Charging Point Station B">Charging Point Station B (FF)</option>
-                      <option value="Platform 6 Stairs">Platform 6 Stairs (FF)</option>
-                      <option value="Water Purifier Station">Water Purifier Station (FF)</option>
-                    </optgroup>
-                    <optgroup label="Second Floor (SF)">
-                      <option value="Railway Police Office">Railway Police Office (SF)</option>
-                      <option value="Resting Dormitories">Resting Dormitories (SF)</option>
-                      <option value="Lost & Found Center">Lost & Found Center (SF)</option>
-                    </optgroup>
-                  </select>
-                </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                  Walk distance: <strong className="text-slate-800 dark:text-white">180 meters</strong> &bull; Target Floor: <strong className="text-slate-800 dark:text-white">{selectedDestination.floor}</strong>
-                </p>
-              </div>
-
-              <div className="text-right bg-blue-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-blue-100 dark:border-blue-900/40">
-                <span className="text-[9px] text-slate-400 dark:text-slate-500 block font-bold uppercase">
-                  EST. TIME
-                </span>
-                <span className="text-base font-mono font-black text-blue-600 dark:text-blue-400">
-                  3 Min
-                </span>
-              </div>
-            </div>
-
-            {/* Checkpoint Progress Stepper showing list of locations and statuses */}
-            <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto pb-1.5 no-scrollbar shrink-0">
-              {getPathPoints().map((checkpoint, idx) => {
-                const isReached = navProgress >= (idx * 25);
-                const isCurrent = navProgress >= ((idx - 1) * 25) && navProgress < (idx * 25);
-                return (
-                  <div key={idx} className="flex items-center gap-1 shrink-0">
-                    <div className={`px-2.5 py-1.5 rounded-lg border text-[9px] font-bold flex items-center gap-1.5 transition-all duration-300 ${
-                      isReached 
-                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400' 
-                        : isCurrent 
-                          ? 'bg-blue-600 border-blue-600 text-white animate-pulse'
-                          : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800/80 text-slate-400 dark:text-slate-500'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${isReached ? 'bg-emerald-500' : isCurrent ? 'bg-white' : 'bg-slate-400'}`}></span>
-                      <span>{checkpoint.label}</span>
-                    </div>
-                    {idx < 4 && <span className="text-slate-300 dark:text-slate-700 text-[10px]">&rarr;</span>}
+              <div className="flex items-center justify-between gap-3">
+                {/* ETA remaining stats */}
+                <div className="text-left flex items-center gap-3">
+                  <div className="flex flex-col">
+                    <span className="text-lg font-mono font-black text-emerald-600 dark:text-emerald-400 leading-none">
+                      {remainingMinutes} min
+                    </span>
+                    <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase mt-1 tracking-wider">
+                      ETA: Dynamic
+                    </span>
                   </div>
-                );
-              })}
-            </div>
+                  <div className="w-[1px] h-8 bg-slate-200 dark:bg-slate-800"></div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">
+                      {remainingDistance} meters
+                    </span>
+                    <span className="text-[9px] text-slate-400 dark:text-slate-500 font-semibold leading-none mt-1">
+                      {isMultiFloor ? 'via Glass Lift A' : 'flat walkway'}
+                    </span>
+                  </div>
+                </div>
 
-            {/* Success Finished Banner or AI Alternative Suggestion Banner */}
-            {navProgress >= 100 ? (
-              <div className="mt-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl p-2.5 flex items-start gap-2.5 text-[11px] text-left leading-relaxed text-emerald-800 dark:text-emerald-400 animate-fadeIn">
-                <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold">Destination Arrived!</p>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Locator has successfully stopped at {selectedDestination.label}. Click 'Reset Navigation' or choose another location to explore.</p>
+                {/* Simulation interactive controller */}
+                <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950 p-1.5 rounded-xl border border-slate-200/40 dark:border-slate-800/80">
+                  <button
+                    id="btn-sim-play-pause"
+                    onClick={() => setNavPlaying(!navPlaying)}
+                    className="w-7 h-7 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 rounded-lg flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-850 active:scale-90 transition cursor-pointer"
+                    title={navPlaying ? "Pause Walking" : "Resume Walking"}
+                  >
+                    {navPlaying ? (
+                      <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24">
+                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3 h-3 fill-current ml-0.5" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    )}
+                  </button>
+                  <div className="flex flex-col px-1">
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="100" 
+                      value={navProgress} 
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setNavProgress(val);
+                        setNavPlaying(false); // Pause auto playback when scrubbed
+                        if (val >= 100) {
+                          setStartLocation(selectedDestination);
+                        }
+                      }}
+                      className="w-16 h-1 bg-blue-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                      title="Scrub GPS Tracker"
+                    />
+                    <span className="text-[7px] font-mono text-slate-400 dark:text-slate-500 mt-0.5 text-center font-bold uppercase tracking-widest">
+                      GPS TRACK
+                    </span>
+                  </div>
+                </div>
+
+                {/* Right column navigation actions */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    id="btn-expand-notif-bar"
+                    onClick={() => setBottomSheetMinimized(false)}
+                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-600 dark:text-slate-300 flex items-center justify-center transition cursor-pointer"
+                    title="Expand Route Information"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                    </svg>
+                  </button>
+
+                  <button
+                    id="btn-exit-directions"
+                    onClick={() => {
+                      const passengerLoc = getCurrentPassengerPosition();
+                      setStartLocation(passengerLoc);
+                      setNavigationActive(false);
+                      setBottomSheetMinimized(false);
+                      setNavProgress(0);
+                    }}
+                    className="h-8 px-2.5 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 hover:bg-rose-600 hover:text-white border border-rose-100 dark:border-rose-950/50 rounded-lg text-[10px] font-black transition active:scale-95 cursor-pointer"
+                  >
+                    End
+                  </button>
                 </div>
               </div>
-            ) : (
-              <div className="mt-2 bg-blue-50/50 dark:bg-slate-950 border border-blue-100 dark:border-slate-800 rounded-xl p-2.5 flex items-start gap-2.5 text-[11px] text-left leading-relaxed text-slate-600 dark:text-slate-400">
-                <AlertCircle className="w-4 h-4 text-emerald-green shrink-0 mt-0.5" />
-                <p>
-                  <strong className="text-blue-900 dark:text-blue-400 font-semibold">AI Routing Recommendation</strong>: Use Exit Corridor B bypass. It features ramp layouts (wheelchair friendly) and avoids current Platform 4 boarding crowds.
-                </p>
-              </div>
-            )}
-
-            {/* Start Directions Button / Minimize Controls */}
-            <div className="flex gap-2.5 mt-3.5">
-              {navigationActive && (
-                <button
-                  id="btn-sheet-minimize"
-                  onClick={() => setBottomSheetMinimized(true)}
-                  className="px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer"
-                  title="Minimize Panel"
-                >
-                  Minimize
-                </button>
-              )}
-              {navProgress >= 100 ? (
-                <button
-                  id="btn-reset-directions"
-                  onClick={() => {
-                    setNavigationActive(false);
-                    setNavProgress(0);
-                    setNavPlaying(true);
-                  }}
-                  className="flex-1 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/10 cursor-pointer active:scale-98 transition"
-                >
-                  Reset Navigation & Wayfinding
-                </button>
-              ) : (
-                <button
-                  id="btn-start-directions"
-                  onClick={() => {
-                    setNavigationActive(true);
-                    setBottomSheetMinimized(true);
-                    onStartNavigation();
-                  }}
-                  className="flex-1 h-11 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-500/10 cursor-pointer active:scale-98 transition"
-                >
-                  <Navigation className="w-4.5 h-4.5 animate-pulse" /> Navigate to {selectedDestination.label}
-                </button>
-              )}
             </div>
-          </>
-        )}
+          ) : (
+            /* ========================================================= */
+            /* EXPANDED FULL DETAIL PANEL                                */
+            /* ========================================================= */
+            <>
+              {/* Visual drag bar */}
+              <div 
+                onClick={() => {
+                  if (navigationActive) {
+                    setBottomSheetMinimized(true);
+                  }
+                }}
+                className={`w-12 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-3.5 shrink-0 ${
+                  navigationActive ? 'cursor-pointer hover:bg-slate-400 transition' : ''
+                }`}
+                title={navigationActive ? "Minimize Panel" : ""}
+              ></div>
+
+              {/* Heatmap Crowd Monitor Legend when activated */}
+              {showCrowdHeatmap && (
+                <div className="bg-slate-50 dark:bg-slate-950 p-2 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-[10px] font-bold mb-2.5 shrink-0 animate-fadeIn rounded-xl">
+                  <span className="text-slate-500">STATION HEATMAP:</span>
+                  <div className="flex gap-3">
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-green"></span> Low</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-500"></span> Medium</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Heavy</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Primary Navigation / Bottom Sheet Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mb-2.5">
+                {/* Start Location Selector */}
+                <div className="text-left space-y-1">
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-extrabold tracking-wider uppercase block flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    YOUR START LOCATION
+                  </span>
+                  <div className="relative">
+                    <select 
+                      value={startLocation.label}
+                      disabled={navigationActive}
+                      onChange={(e) => {
+                        const found = STATION_DESTINATIONS.find(d => d.label === e.target.value);
+                        if (found) {
+                          setStartLocation({
+                            label: found.label,
+                            x: found.x,
+                            y: found.y,
+                            details: found.details,
+                            floor: found.floor
+                          });
+                          if (!navigationActive) {
+                            setCurrentFloor(found.floor);
+                          }
+                          setNavProgress(0);
+                        }
+                      }}
+                      className="mt-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 w-full focus:outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:opacity-60"
+                    >
+                      <optgroup label="Ground Floor (GF)">
+                        {STATION_DESTINATIONS.filter(d => d.floor === 'GF').map(d => (
+                          <option key={d.label} value={d.label}>{d.label} (GF)</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="First Floor (FF)">
+                        {STATION_DESTINATIONS.filter(d => d.floor === 'FF').map(d => (
+                          <option key={d.label} value={d.label}>{d.label} (FF)</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Second Floor (SF)">
+                        {STATION_DESTINATIONS.filter(d => d.floor === 'SF').map(d => (
+                          <option key={d.label} value={d.label}>{d.label} (SF)</option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Target Destination Selector */}
+                <div className="text-left space-y-1">
+                  <span className="text-[10px] text-blue-600 dark:text-blue-400 font-extrabold tracking-wider uppercase block flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                    TARGET DESTINATION
+                  </span>
+                  <div className="relative">
+                    <select 
+                      value={selectedDestination.label}
+                      disabled={navigationActive}
+                      onChange={(e) => {
+                        const found = STATION_DESTINATIONS.find(d => d.label === e.target.value);
+                        if (found) {
+                          handleSelectNewDestination({
+                            label: found.label,
+                            x: found.x,
+                            y: found.y,
+                            details: found.details,
+                            floor: found.floor
+                          });
+                        }
+                      }}
+                      className="mt-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
+                    >
+                      <optgroup label="Ground Floor (GF)">
+                        {STATION_DESTINATIONS.filter(d => d.floor === 'GF').map(d => (
+                          <option key={d.label} value={d.label}>{d.label} (GF)</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="First Floor (FF)">
+                        {STATION_DESTINATIONS.filter(d => d.floor === 'FF').map(d => (
+                          <option key={d.label} value={d.label}>{d.label} (FF)</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Second Floor (SF)">
+                        {STATION_DESTINATIONS.filter(d => d.floor === 'SF').map(d => (
+                          <option key={d.label} value={d.label}>{d.label} (SF)</option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic Stats Banner */}
+              <div className="flex justify-between items-center bg-blue-50/40 dark:bg-slate-950 p-2.5 rounded-2xl border border-blue-100/30 dark:border-slate-850 mb-2 shrink-0">
+                <div className="text-left">
+                  <span className="text-[9px] text-slate-400 dark:text-slate-500 font-extrabold uppercase tracking-wider block">ROUTE PROFILE</span>
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mt-0.5">
+                    Distance: <strong className="text-slate-900 dark:text-white font-black">{totalDistance} meters</strong> &bull; Floors: <strong className="text-blue-600 dark:text-blue-400 font-extrabold">{startLocation.floor} &rarr; {selectedDestination.floor}</strong>
+                  </p>
+                </div>
+                <div className="text-right flex items-center gap-2">
+                  <div className="bg-blue-600 text-white rounded-lg px-2.5 py-1 text-center shrink-0 shadow-sm">
+                    <span className="text-[7px] text-blue-100 block font-bold leading-none uppercase">TIME</span>
+                    <span className="text-xs font-mono font-black">{totalMinutes} min</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Checkpoint Progress Stepper showing list of locations and statuses */}
+              <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto pb-1.5 no-scrollbar shrink-0">
+                {getPathPoints().map((checkpoint, idx) => {
+                  const isReached = navProgress >= (idx * 25);
+                  const isCurrent = navProgress >= ((idx - 1) * 25) && navProgress < (idx * 25);
+                  return (
+                    <div key={idx} className="flex items-center gap-1 shrink-0">
+                      <div className={`px-2.5 py-1.5 rounded-lg border text-[9px] font-bold flex items-center gap-1.5 transition-all duration-300 ${
+                        isReached 
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400' 
+                          : isCurrent 
+                            ? 'bg-blue-600 border-blue-600 text-white animate-pulse'
+                            : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800/80 text-slate-400 dark:text-slate-500'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${isReached ? 'bg-emerald-500' : isCurrent ? 'bg-white' : 'bg-slate-400'}`}></span>
+                        <span>{checkpoint.label}</span>
+                      </div>
+                      {idx < 4 && <span className="text-slate-300 dark:text-slate-700 text-[10px]">&rarr;</span>}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Success Finished Banner or AI Alternative Suggestion Banner */}
+              {navProgress >= 100 ? (
+                <div className="mt-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl p-2.5 flex items-start gap-2.5 text-[11px] text-left leading-relaxed text-emerald-800 dark:text-emerald-400 animate-fadeIn">
+                  <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">Destination Arrived!</p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Locator has successfully stopped at {selectedDestination.label}. Click 'Reset Navigation' or choose another location to explore.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 bg-blue-50/50 dark:bg-slate-950 border border-blue-100 dark:border-slate-800 rounded-xl p-2.5 flex items-start gap-2.5 text-[11px] text-left leading-relaxed text-slate-600 dark:text-slate-400">
+                  <AlertCircle className="w-4 h-4 text-emerald-green shrink-0 mt-0.5" />
+                  <p>
+                    <strong className="text-blue-900 dark:text-blue-400 font-semibold">AI Routing Recommendation</strong>: Use Exit Corridor B bypass. It features ramp layouts (wheelchair friendly) and avoids current Platform 4 boarding crowds.
+                  </p>
+                </div>
+              )}
+
+              {/* Start Directions Button / Minimize Controls */}
+              <div className="flex gap-2.5 mt-3.5">
+                {navigationActive && (
+                  <button
+                    id="btn-sheet-minimize"
+                    onClick={() => setBottomSheetMinimized(true)}
+                    className="px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer"
+                    title="Minimize Panel"
+                  >
+                    Minimize
+                  </button>
+                )}
+                {navProgress >= 100 ? (
+                  <button
+                    id="btn-reset-directions"
+                    onClick={() => {
+                      setStartLocation(selectedDestination);
+                      setNavigationActive(false);
+                      setNavProgress(0);
+                      setNavPlaying(true);
+                    }}
+                    className="flex-1 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/10 cursor-pointer active:scale-98 transition"
+                  >
+                    Reset Navigation & Wayfinding
+                  </button>
+                ) : (
+                  <button
+                    id="btn-start-directions"
+                    onClick={() => {
+                      setNavigationActive(true);
+                      setBottomSheetMinimized(true);
+                      onStartNavigation();
+                    }}
+                    className="flex-1 h-11 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-500/10 cursor-pointer active:scale-98 transition"
+                  >
+                    <Navigation className="w-4.5 h-4.5 animate-pulse" /> Navigate to {selectedDestination.label}
+                  </button>
+                )}
+              </div>
+            </>
+          );
+        })()}
       </div>
     </div>
   );
