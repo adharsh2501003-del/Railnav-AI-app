@@ -4,6 +4,7 @@ import {
   EyeOff, RefreshCw, Sparkles, Navigation, AlertCircle, CheckCircle
 } from 'lucide-react';
 import { STATION_DESTINATIONS } from '../data';
+import { getFacilities } from '../api/client';
 
 interface StationMapProps {
   isDarkMode: boolean;
@@ -69,6 +70,13 @@ export default function StationMap({
   const [navProgress, setNavProgress] = useState(0);
   const [navPlaying, setNavPlaying] = useState(true);
   const [bottomSheetMinimized, setBottomSheetMinimized] = useState(false);
+  const [stationDestinations, setStationDestinations] = useState(STATION_DESTINATIONS);
+
+  useEffect(() => {
+    getFacilities('ndls').then((items) => {
+      if (items.length > 0) setStationDestinations(items);
+    }).catch((error) => console.warn('Unable to load station facilities:', error));
+  }, []);
 
   // Unique and dynamic wayfinding route generator with exactly 3 intermediate checkpoints
   const getPathPoints = () => {
@@ -185,7 +193,7 @@ export default function StationMap({
       return selectedDestination;
     }
     const pos = getSimulatedUserPosition(navProgress);
-    const matched = STATION_DESTINATIONS.find(d => {
+    const matched = stationDestinations.find(d => {
       if (d.floor !== pos.floor) return false;
       const dx = d.x - pos.x;
       const dy = d.y - pos.y;
@@ -994,7 +1002,7 @@ export default function StationMap({
                       value={startLocation.label}
                       disabled={navigationActive}
                       onChange={(e) => {
-                        const found = STATION_DESTINATIONS.find(d => d.label === e.target.value);
+                        const found = stationDestinations.find(d => d.label === e.target.value);
                         if (found) {
                           setStartLocation({
                             label: found.label,
@@ -1012,17 +1020,17 @@ export default function StationMap({
                       className="mt-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 w-full focus:outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:opacity-60"
                     >
                       <optgroup label="Ground Floor (GF)">
-                        {STATION_DESTINATIONS.filter(d => d.floor === 'GF').map(d => (
+                        {stationDestinations.filter(d => d.floor === 'GF').map(d => (
                           <option key={d.label} value={d.label}>{d.label} (GF)</option>
                         ))}
                       </optgroup>
                       <optgroup label="First Floor (FF)">
-                        {STATION_DESTINATIONS.filter(d => d.floor === 'FF').map(d => (
+                        {stationDestinations.filter(d => d.floor === 'FF').map(d => (
                           <option key={d.label} value={d.label}>{d.label} (FF)</option>
                         ))}
                       </optgroup>
                       <optgroup label="Second Floor (SF)">
-                        {STATION_DESTINATIONS.filter(d => d.floor === 'SF').map(d => (
+                        {stationDestinations.filter(d => d.floor === 'SF').map(d => (
                           <option key={d.label} value={d.label}>{d.label} (SF)</option>
                         ))}
                       </optgroup>
@@ -1041,7 +1049,7 @@ export default function StationMap({
                       value={selectedDestination.label}
                       disabled={navigationActive}
                       onChange={(e) => {
-                        const found = STATION_DESTINATIONS.find(d => d.label === e.target.value);
+                        const found = stationDestinations.find(d => d.label === e.target.value);
                         if (found) {
                           handleSelectNewDestination({
                             label: found.label,
@@ -1055,17 +1063,17 @@ export default function StationMap({
                       className="mt-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
                     >
                       <optgroup label="Ground Floor (GF)">
-                        {STATION_DESTINATIONS.filter(d => d.floor === 'GF').map(d => (
+                        {stationDestinations.filter(d => d.floor === 'GF').map(d => (
                           <option key={d.label} value={d.label}>{d.label} (GF)</option>
                         ))}
                       </optgroup>
                       <optgroup label="First Floor (FF)">
-                        {STATION_DESTINATIONS.filter(d => d.floor === 'FF').map(d => (
+                        {stationDestinations.filter(d => d.floor === 'FF').map(d => (
                           <option key={d.label} value={d.label}>{d.label} (FF)</option>
                         ))}
                       </optgroup>
                       <optgroup label="Second Floor (SF)">
-                        {STATION_DESTINATIONS.filter(d => d.floor === 'SF').map(d => (
+                        {stationDestinations.filter(d => d.floor === 'SF').map(d => (
                           <option key={d.label} value={d.label}>{d.label} (SF)</option>
                         ))}
                       </optgroup>

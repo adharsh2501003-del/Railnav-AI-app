@@ -18,6 +18,7 @@ import PlatformDetails from './components/PlatformDetails';
 import EmergencyScreen from './components/EmergencyScreen';
 import NotificationsScreen from './components/NotificationsScreen';
 import ProfileScreen from './components/ProfileScreen';
+import { getNotifications, subscribeToLiveEvents, triggerSOS } from './api/client';
 
 export default function App() {
   // Mobile simulation state flow
@@ -116,6 +117,20 @@ export default function App() {
   ];
 
   const activeNotificationsCount = notifications.filter(n => !n.read).length;
+
+  useEffect(() => {
+    let cancelled = false;
+    getNotifications('ndls').then((remoteNotifications) => {
+      if (!cancelled && remoteNotifications.length > 0) setNotifications(remoteNotifications);
+    }).catch((error) => console.warn('Unable to load live notifications:', error));
+    const unsubscribe = subscribeToLiveEvents('ndls', (event) => {
+      setNotifications((previous) => [event, ...previous.filter((item) => item.id !== event.id)]);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   // Handle Home Quick Actions to Map redirection
   const handleQuickAction = (actionId: string) => {
@@ -271,6 +286,9 @@ export default function App() {
               accessibility={accessibility}
               setAccessibility={setAccessibility}
               onSpeakText={handleSpeakText}
+              onTriggerSOS={async (optionName) => {
+                await triggerSOS({ stationId: 'ndls', floorId: 'GF', note: optionName });
+              }}
             />
           )}
 
