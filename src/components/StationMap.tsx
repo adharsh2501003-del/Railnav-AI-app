@@ -11,6 +11,7 @@ interface StationMapProps {
   preselectedFilter?: string;
   preselectedRoute?: boolean;
   onStartNavigation: () => void;
+  onSpeak?: (text: string) => void;
   preselectedDestination?: {
     label: string;
     x: number;
@@ -25,6 +26,7 @@ export default function StationMap({
   preselectedFilter = '',
   preselectedRoute = false,
   onStartNavigation,
+  onSpeak,
   preselectedDestination = null,
 }: StationMapProps) {
   const [currentFloor, setCurrentFloor] = useState('GF'); // 'GF' | 'FF' | 'SF'
@@ -276,6 +278,13 @@ export default function StationMap({
       }
     }
   }, [navProgress, navigationActive]);
+
+  useEffect(() => {
+    if (!navigationActive || !onSpeak || !selectedDestination) return;
+    if (navProgress === 1) onSpeak(`Walk toward ${selectedDestination.label}.`);
+    if (navProgress === 50) onSpeak(`Continue to ${selectedDestination.label}.`);
+    if (navProgress === 100) onSpeak(`You have arrived at ${selectedDestination.label}.`);
+  }, [navProgress, navigationActive, onSpeak, selectedDestination]);
 
   // Construct SVG path string for segments located strictly on the specified floor
   const getSVGPathD = (floor: string) => {

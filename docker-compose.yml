@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: railnav
+      POSTGRES_USER: railnav
+      POSTGRES_PASSWORD: railnav-local-only
+    ports:
+      - "5432:5432"
+    volumes:
+      - railnav-postgres:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+volumes:
+  railnav-postgres:

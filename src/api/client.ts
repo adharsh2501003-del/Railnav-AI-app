@@ -1,5 +1,6 @@
 import { AppNotification, Facility, RouteResponse, StationFloor, Train } from '../types';
 import { STATION_DESTINATIONS } from '../data';
+import { loadOffline, saveOffline } from '../offline';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS !== 'false';
@@ -25,7 +26,14 @@ export async function getFacilities(stationId = 'ndls', floor?: string): Promise
   if (USE_MOCKS) {
     return mockFacilities.filter((facility) => !floor || facility.floor === floor);
   }
-  return request<Facility[]>(`/stations/${encodeURIComponent(stationId)}/facilities${floor ? `?floor=${encodeURIComponent(floor)}` : ''}`);
+  const key = `facilities:${stationId}:${floor || 'all'}`;
+  try {
+    const value = await request<Facility[]>(`/stations/${encodeURIComponent(stationId)}/facilities${floor ? `?floor=${encodeURIComponent(floor)}` : ''}`);
+    saveOffline(key, value); return value;
+  } catch (error) {
+    const cached = loadOffline<Facility[]>(key); if (cached) return cached;
+    throw error;
+  }
 }
 
 export async function getFloors(stationId = 'ndls'): Promise<StationFloor[]> {
@@ -65,7 +73,14 @@ export async function getRoute(
       geometry: [start, destination].map(({ x, y, floor }) => ({ x, y, floor })),
     };
   }
-  return request<RouteResponse>(`/route?station=${encodeURIComponent(stationId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&accessible=${accessible}`);
+  const key = `route:${stationId}:${from}:${to}:${accessible}`;
+  try {
+    const value = await request<RouteResponse>(`/route?station=${encodeURIComponent(stationId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&accessible=${accessible}`);
+    saveOffline(key, value); return value;
+  } catch (error) {
+    const cached = loadOffline<RouteResponse>(key); if (cached) return cached;
+    throw error;
+  }
 }
 
 export async function triggerSOS(payload: { stationId: string; floorId: string; note?: string }) {
@@ -76,10 +91,18 @@ export async function triggerSOS(payload: { stationId: string; floorId: string; 
 }
 
 export function subscribeToLiveEvents(stationId: string, onEvent: (event: AppNotification) => void) {
-  if (USE_MOCKS || typeof EventSource === 'undefined') return () => undefined;
+  if (USE_MOCKS) return () => undefined;
+  if (typeof WebSocket !== 'undefined') {
+    const wsBase = (API_BASE_URL || window.location.origin).replace(/^http/, 'ws');
+    const socket = new WebSocket(`${wsBase}/ws?station=${encodeURIComponent(stationId)}`);
+    socket.onmessage = (message) => {
+      try { onEvent(JSON.parse(message.data) as AppNotification); } catch { /* Ignore malformed external events. */ }
+    };
+    socket.onerror = () => socket.close();
+    return () => socket.close();
+  }
+  if (typeof EventSource === 'undefined') return () => undefined;
   const source = new EventSource(`${API_BASE_URL}/live?station=${encodeURIComponent(stationId)}`);
-  source.onmessage = (message) => {
-    try { onEvent(JSON.parse(message.data) as AppNotification); } catch { /* Ignore malformed external events. */ }
-  };
+  source.onmessage = (message) => { try { onEvent(JSON.parse(message.data) as AppNotification); } catch { /* Ignore malformed events. */ } };
   return () => source.close();
 }
