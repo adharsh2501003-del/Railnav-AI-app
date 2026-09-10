@@ -19,6 +19,7 @@ import EmergencyScreen from './components/EmergencyScreen';
 import NotificationsScreen from './components/NotificationsScreen';
 import ProfileScreen from './components/ProfileScreen';
 import { getNotifications, subscribeToLiveEvents, triggerSOS } from './api/client';
+import { t } from './i18n';
 
 export default function App() {
   // Mobile simulation state flow
@@ -27,6 +28,8 @@ export default function App() {
   const [userLoggedIn, setUserLoggedIn] = useState<boolean>(false);
   const [userName, setUserName] = useState<string>('Adharsh');
   const [userPhone, setUserPhone] = useState<string>('+91 9876543210');
+  const kioskMode = import.meta.env.VITE_KIOSK_MODE === 'true' || new URLSearchParams(window.location.search).has('kiosk');
+  const [kioskIdle, setKioskIdle] = useState(false);
 
   // Pre-configured simulation variables for cross-screen transitions
   const [selectedMapFilter, setSelectedMapFilter] = useState<string>('');
@@ -93,6 +96,7 @@ export default function App() {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel(); // Cancel active speech
         const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = accessibility.language === 'hi' ? 'hi-IN' : accessibility.language === 'bn' ? 'bn-IN' : 'en-IN';
         utterance.rate = 1.0;
         utterance.pitch = 1.0;
         window.speechSynthesis.speak(utterance);
@@ -101,6 +105,20 @@ export default function App() {
       console.warn('Speech synthesis blocked by browser security guidelines:', e);
     }
   };
+
+  useEffect(() => {
+    if (!kioskMode) return;
+    let timer: number;
+    const reset = () => {
+      window.clearTimeout(timer);
+      setKioskIdle(false);
+      timer = window.setTimeout(() => { setKioskIdle(true); setScreen('splash'); }, 120000);
+    };
+    const events = ['pointerdown', 'pointermove', 'keydown', 'touchstart'];
+    events.forEach((event) => window.addEventListener(event, reset));
+    reset();
+    return () => { window.clearTimeout(timer); events.forEach((event) => window.removeEventListener(event, reset)); };
+  }, [kioskMode]);
 
   // Pre-configured screens list for our Sandbox Developer Side panel
   const screensList = [
@@ -202,6 +220,11 @@ export default function App() {
       <div className={`w-full h-full flex flex-col relative transition-all ${activeStyleClasses} ${
         isDarkMode ? 'bg-slate-950 dark text-white' : 'bg-slate-50 text-slate-900'
       }`}>
+        {kioskIdle && (
+          <button className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/95 text-white text-xl" onClick={() => setKioskIdle(false)}>
+            {t(accessibility.language, 'idle')}
+          </button>
+        )}
         
         {/* Scrollable Screen Content */}
         <div className="flex-1 overflow-hidden relative">
@@ -244,6 +267,7 @@ export default function App() {
               preselectedFilter={selectedMapFilter}
               preselectedRoute={selectedMapRoute}
               preselectedDestination={selectedMapDestination}
+              onSpeak={handleSpeakText}
               onStartNavigation={() => {
                 handleSpeakText("Wayfinding started. Walk forward forty meters, then take the main escalator on your left to the overbridge.");
               }}

@@ -4,6 +4,8 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { STATION_DESTINATIONS } from "./src/data";
+import { WebSocketServer } from "ws";
+import { verifyJwt } from "./src/server/auth";
 
 dotenv.config();
 
@@ -53,19 +55,27 @@ const notifications: LiveEvent[] = [
   { id: "notif-2", type: "delay", title: "Train Delayed - Kerala Exp", message: "Kerala Express is delayed by 25 minutes.", time: "10 mins ago", read: false },
 ];
 const liveClients = new Set<import("express").Response>();
+let webSocketClients: Set<import("ws").WebSocket> = new Set();
 
 function publish(event: LiveEvent) {
   notifications.unshift(event);
   for (const client of liveClients) client.write(`data: ${JSON.stringify(event)}\n\n`);
+  for (const client of webSocketClients) if (client.readyState === 1) client.send(JSON.stringify(event));
 }
 
 function requireStaff(req: import("express").Request, res: import("express").Response, stationId: string) {
   const token = req.header("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!token || !["staff-demo", "admin-demo"].includes(token)) {
+  const user = token ? verifyJwt(token) : null;
+  const isDemoStaff = token === "staff-demo" || token === "admin-demo";
+  if (!token || (!user && !isDemoStaff)) {
     res.status(401).json({ error: "Staff authentication required" });
     return false;
   }
-  if (token === "staff-demo" && stationId !== station.id) {
+  if (user && !user.roles.some((role) => role === "staff" || role === "admin")) {
+    res.status(403).json({ error: "Insufficient permissions" });
+    return false;
+  }
+  if ((token === "staff-demo" || (user?.roles.includes("staff") && !user.roles.includes("admin") && user.stationId !== station.id)) && stationId !== station.id) {
     res.status(403).json({ error: "Staff account is not assigned to this station" });
     return false;
   }
@@ -343,8 +353,14 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`RailNav AI Full-Stack Server running on port ${PORT}`);
+  });
+  const wss = new WebSocketServer({ server, path: "/ws" });
+  wss.on("connection", (socket) => {
+    webSocketClients.add(socket);
+    socket.send(JSON.stringify(notifications[0]));
+    socket.on("close", () => webSocketClients.delete(socket));
   });
 }
 
