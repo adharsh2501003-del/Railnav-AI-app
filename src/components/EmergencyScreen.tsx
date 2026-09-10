@@ -10,6 +10,7 @@ interface EmergencyScreenProps {
   accessibility: AccessibilitySettings;
   setAccessibility: React.Dispatch<React.SetStateAction<AccessibilitySettings>>;
   onSpeakText: (text: string) => void;
+  onTriggerSOS?: (optionName: string) => Promise<void>;
 }
 
 export default function EmergencyScreen({
@@ -17,6 +18,7 @@ export default function EmergencyScreen({
   accessibility,
   setAccessibility,
   onSpeakText,
+  onTriggerSOS,
 }: EmergencyScreenProps) {
   const [activeTab, setActiveTab] = useState<'emergency' | 'accessibility'>('emergency');
   const [sosTriggered, setSosTriggered] = useState(false);
@@ -38,7 +40,14 @@ export default function EmergencyScreen({
     { code: 'bn', label: 'বাংলা (Bengali)' }
   ];
 
-  const handleTriggerSOS = (optionName: string) => {
+  const handleTriggerSOS = async (optionName: string) => {
+    if (onTriggerSOS) {
+      try {
+        await onTriggerSOS(optionName);
+      } catch (error) {
+        console.error('SOS dispatch failed:', error);
+      }
+    }
     setSosOption(optionName);
     setSosTriggered(true);
     onSpeakText(`S O S triggered for ${optionName}. RailNav emergency dispatch notified. Help desk is forty five meters away.`);

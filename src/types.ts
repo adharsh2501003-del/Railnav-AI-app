@@ -1,3 +1,5 @@
+import { StationDestination } from './data';
+
 export interface Train {
   number: string;
   name: string;
@@ -52,4 +54,33 @@ export interface UserProfile {
     to: string;
     station: string;
   }[];
+}
+
+export interface StationFloor {
+  id: string;
+  level: string;
+  label: string;
+}
+
+export interface Facility extends StationDestination {
+  id: string;
+  stationId: string;
+  floorId: string;
+  accessible: boolean;
+}
+
+export interface RouteStep {
+  instruction: string;
+  distanceMeters: number;
+  floor: string;
+  kind: 'walk' | 'lift' | 'escalator' | 'stairs' | 'arrive';
+}
+
+export interface RouteResponse {
+  stationId: string;
+  from: string;
+  to: string;
+  distanceMeters: number;
+  steps: RouteStep[];
+  geometry: { x: number; y: number; floor: string }[];
 }
