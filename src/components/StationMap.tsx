@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   MapPin, Layers, Compass, ZoomIn, ZoomOut, ArrowRight, Eye, 
   EyeOff, RefreshCw, Sparkles, Navigation, AlertCircle, CheckCircle
@@ -37,6 +37,7 @@ export default function StationMap({
   const [showCrowdHeatmap, setShowCrowdHeatmap] = useState(false);
   const [navigationActive, setNavigationActive] = useState(preselectedRoute);
   const [mapCenter, setMapCenter] = useState({ x: 0, y: 0 });
+  const mapDrag = useRef<{ x: number; y: number } | null>(null);
 
   // Currently selected starting position for dynamic routing
   const [startLocation, setStartLocation] = useState<{
@@ -417,6 +418,18 @@ export default function StationMap({
 
   const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 0.25, 2));
   const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 0.25, 0.75));
+  const handleMapPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    mapDrag.current = { x: event.clientX - mapCenter.x, y: event.clientY - mapCenter.y };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const handleMapPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!mapDrag.current) return;
+    setMapCenter({
+      x: Math.max(-90, Math.min(90, event.clientX - mapDrag.current.x)),
+      y: Math.max(-120, Math.min(120, event.clientY - mapDrag.current.y)),
+    });
+  };
+  const handleMapPointerUp = () => { mapDrag.current = null; };
 
   // Custom station map coordinates for elements depending on floor
   const mapMarkers: Record<string, { x: number; y: number; label: string; type: string; details: string; crowd: 'Low' | 'Medium' | 'Heavy' }[]> = {
@@ -614,13 +627,17 @@ export default function StationMap({
       {/* Map Drawing Canvas Area */}
       <div 
         className="flex-1 w-full relative overflow-hidden flex items-center justify-center"
-        style={{ cursor: 'grab' }}
+        onPointerDown={handleMapPointerDown}
+        onPointerMove={handleMapPointerMove}
+        onPointerUp={handleMapPointerUp}
+        onPointerCancel={handleMapPointerUp}
+        style={{ cursor: mapDrag.current ? 'grabbing' : 'grab', touchAction: 'none' }}
       >
         {/* Render Vector Map Base layout inside SVG */}
         <div 
           className="w-[360px] h-[480px] bg-white dark:bg-slate-900 rounded-3xl relative shadow-inner overflow-hidden border border-slate-200 dark:border-slate-800"
           style={{
-            transform: `scale(${zoomLevel}) translate(${mapCenter.x}px, ${mapCenter.y}px)`,
+            transform: `translate(${mapCenter.x}px, ${mapCenter.y}px) scale(${zoomLevel})`,
             transition: 'transform 0.25s cubic-bezier(0.1, 0.8, 0.2, 1)'
           }}
         >

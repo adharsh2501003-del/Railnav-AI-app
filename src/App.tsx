@@ -20,6 +20,7 @@ import NotificationsScreen from './components/NotificationsScreen';
 import ProfileScreen from './components/ProfileScreen';
 import { getNotifications, subscribeToLiveEvents, triggerSOS } from './api/client';
 import { t } from './i18n';
+import { STATION_DESTINATIONS } from './data';
 
 export default function App() {
   // Mobile simulation state flow
@@ -160,11 +161,27 @@ export default function App() {
     if (actionId === 'atm') mapFilter = 'atms';
     if (actionId === 'charging') mapFilter = 'charging';
 
-    if (mapFilter) {
+    const destinationLabels: Record<string, string> = {
+      ticket: 'Ticket Counter North',
+      food: 'IRCTC Food Court',
+      restroom: 'Restroom Block A',
+      waiting: 'General Waiting Room',
+      lift: 'Glass Lift A',
+      escalator: 'Platform 6 Stairs',
+      exit: 'Platform 5',
+      atm: 'State Bank ATM',
+      charging: 'Charging Point Station B',
+    };
+    const destination = destinationLabels[actionId]
+      ? STATION_DESTINATIONS.find((item) => item.label === destinationLabels[actionId])
+      : undefined;
+
+    if (mapFilter || destination) {
       setSelectedMapFilter(mapFilter);
-      setSelectedMapRoute(false);
+      setSelectedMapDestination(destination || null);
+      setSelectedMapRoute(Boolean(destination));
       setScreen('map');
-      handleSpeakText(`Showing nearest ${mapFilter} layers on the station map.`);
+      handleSpeakText(`Routing you to ${destination?.label || `the nearest ${mapFilter}`}.`);
     } else if (actionId === 'police' || actionId === 'medical') {
       setScreen('emergency');
     } else if (actionId === 'platform') {
@@ -299,6 +316,7 @@ export default function App() {
               onStartNavigation={() => {
                 setSelectedMapFilter('platforms');
                 setSelectedMapRoute(true);
+                setSelectedMapDestination(STATION_DESTINATIONS.find((item) => item.label === 'Platform 5') || null);
                 setScreen('map');
               }}
             />

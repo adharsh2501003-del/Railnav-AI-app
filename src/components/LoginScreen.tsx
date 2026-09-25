@@ -8,6 +8,7 @@ interface LoginScreenProps {
 
 export default function LoginScreen({ onLoginSuccess, isDarkMode }: LoginScreenProps) {
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [isOtpSent, setIsOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState(['', '', '', '']);
   const [errorMessage, setErrorMessage] = useState('');
@@ -40,7 +41,7 @@ export default function LoginScreen({ onLoginSuccess, isDarkMode }: LoginScreenP
     // Simulate API verification
     setTimeout(() => {
       setLoading(false);
-      onLoginSuccess('Adharsh', '+91 ' + phoneNumber);
+      onLoginSuccess(displayName.trim() || 'Passenger', '+91 ' + phoneNumber);
     }, 800);
   };
 
@@ -48,7 +49,7 @@ export default function LoginScreen({ onLoginSuccess, isDarkMode }: LoginScreenP
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
-      onLoginSuccess('Adharsh', '+91 9876543210');
+      onLoginSuccess(displayName.trim() || 'Passenger', '+91 9876543210');
     }, 600);
   };
 
@@ -117,6 +118,19 @@ export default function LoginScreen({ onLoginSuccess, isDarkMode }: LoginScreenP
         {/* Form elements */}
         {!isOtpSent ? (
           <form id="form-phone-submit" onSubmit={handlePhoneSubmit} className="space-y-4">
+            <div className="space-y-1.5 text-left">
+              <label htmlFor="display-name" className="text-xs font-semibold text-slate-500 dark:text-slate-400">Your Name</label>
+              <input
+                id="display-name"
+                type="text"
+                required
+                maxLength={40}
+                placeholder="Enter your name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value.replace(/[<>]/g, ''))}
+                className="w-full h-12 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent dark:text-white"
+              />
+            </div>
             <div className="space-y-1.5 text-left">
               <label htmlFor="phone-number" className="text-xs font-semibold text-slate-500 dark:text-slate-400">Mobile Number</label>
               <div className="relative">

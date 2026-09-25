@@ -201,65 +201,68 @@ function getGeminiClient(): GoogleGenAI | null {
 
 // Local mock responder for high reliability when API key is missing or rate limited
 function getMockResponse(prompt: string): string {
-  const query = prompt.toLowerCase();
-  
-  if (query.includes("platform 5") || query.includes("five")) {
-    return "To reach Platform 5: From your current location on the Ground Floor, walk past the main ticket counters. Take the primary escalator or the wheelchair-friendly Glass Lift A. Walk across to the signpost for Platform 5 and descend. Estimated walking time is 3 minutes.";
+  const query = prompt.trim().toLowerCase().replace(/\s+/g, " ");
+  const has = (...terms: string[]) => terms.some((term) => query.includes(term));
+
+  if (!query) return "Tell me what you need help finding, such as a platform, restroom, food court, lift, ticket counter, or emergency assistance.";
+  if (has("hello", "hi ", "hey", "good morning", "good afternoon", "good evening")) {
+    return "Hello! I can help you navigate the station. Ask me for a platform, facility, route, accessibility option, train area, or emergency help.";
+  }
+  if (has("thank", "thanks")) return "You're welcome! I’m here whenever you need help finding your way around the station.";
+  if (has("help", "what can you do", "what do you know")) {
+    return "I can guide you to platforms, restrooms, food, tickets, lifts, escalators, waiting rooms, ATMs, charging points, water, security, and Lost & Found. You can ask in a full sentence, such as “How do I get to Platform 8?”";
   }
 
-  if (query.includes("platform 4") || query.includes("four")) {
-    return "To reach Platform 4: Walk straight from the entrance along the main ground floor corridor. Platform 4 is located on the Ground Floor itself, with immediate track access. No stairs or lifts are required for this track.";
-  }
-  
-  if (query.includes("restroom") || query.includes("washroom") || query.includes("toilet")) {
-    return "The nearest clean restroom is Restroom Block A situated on the Ground Floor near the waiting hall. It is fully sanitized, includes disabled-friendly facilities, and has high-contrast sign boards.";
-  }
-
-  if (query.includes("lift") || query.includes("elevator") || query.includes("wheelchair") || query.includes("accessible")) {
-    return "For complete step-free accessibility, please use Glass Lift A on the Ground Floor, which provides wheelchair access from level GF to FF. There is also a secondary ramp available at the main gate.";
-  }
-
-  if (query.includes("food") || query.includes("court") || query.includes("eat") || query.includes("restaurant") || query.includes("irctc")) {
-    return "The primary dining facility is the IRCTC Food Court located on the First Floor (FF). It features Dominos, Haldirams, Coffee Kiosks, and local regional Indian breakfast foods.";
+  const platformMatch = query.match(/platform\s*(?:no\.?\s*)?(\d+)|(?:platform|track)\s*(one|two|three|four|five|six|seven|eight)/);
+  const numberWords: Record<string, string> = { one: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8" };
+  if (platformMatch) {
+    const platform = platformMatch[1] || numberWords[platformMatch[2]];
+    const details: Record<string, string> = {
+      "4": "Platform 4 is on the Ground Floor along the main corridor, so no lift or stairs are required.",
+      "5": "Platform 5 is reached by following the main platform signs, then taking the primary escalator or wheelchair-friendly Glass Lift A before descending to the platform.",
+      "8": "Platform 8 is on the First Floor overbridge. Take the escalator beside Gate A, cross the bridge, and follow the Platform 8 signs.",
+    };
+    return `To reach Platform ${platform}: ${details[platform] || "Follow the overhead platform signs from the main concourse. I can also open the interactive map to help you follow the route."} Estimated walking time is about 3–6 minutes depending on your starting point.`;
   }
 
-  if (query.includes("ticket") || query.includes("counter") || query.includes("booking")) {
-    return "Unreserved ticket bookings can be purchased at Ticket Counter North on the Ground Floor. There are 8 active counters open with a queue status monitor to speed up check-in.";
+  if (has("restroom", "washroom", "toilet", "bathroom")) {
+    return "The nearest clean restroom is Restroom Block A on the Ground Floor near the waiting hall. It has accessible facilities and high-contrast sign boards.";
+  }
+  if (has("lift", "elevator", "wheelchair", "accessible", "step free", "step-free", "ramp")) {
+    return "For step-free travel, use Glass Lift A on the Ground Floor. It connects GF and FF and supports wheelchair access; a ramp is also available at the main gate.";
+  }
+  if (has("food", "court", "eat", "restaurant", "irctc", "coffee", "cafe")) {
+    return "The IRCTC Food Court is on the First Floor (FF), with Domino’s, Haldirams, coffee kiosks, and local breakfast options.";
+  }
+  if (has("ticket", "counter", "booking")) {
+    return "Ticket Counter North is on the Ground Floor. Eight counters are currently available for unreserved ticket bookings.";
+  }
+  if (has("atm", "cash", "money")) {
+    return "The State Bank ATM is on the Ground Floor near the exit gates and is available 24/7.";
+  }
+  if (has("waiting", "lounge", "sit", "rest")) {
+    return "The General Waiting Room is on the Ground Floor. For quieter seating and refreshments, use the Executive VIP Lounge on the First Floor.";
+  }
+  if (has("charge", "charging", "usb", "power")) {
+    return "Charging Point Station B is on the First Floor (FF), with six USB docks and multi-pin outlets.";
+  }
+  if (has("stair", "stairs", "escalator")) {
+    return "Use Platform 6 Stairs on the First Floor; an adjacent escalator provides continuous access between levels.";
+  }
+  if (has("water", "drinking", "purifier")) {
+    return "The Water Purifier Station is on the First Floor and provides free cold RO drinking water.";
+  }
+  if (has("police", "rpf", "security", "sos", "emergency", "unsafe")) {
+    return "For emergency assistance, go to the Railway Police Office (RPF booth) on the Second Floor. Railway helpline: 139. If you are in immediate danger, contact station staff now.";
+  }
+  if (has("dormitory", "dormitories", "sleeping", "bed")) {
+    return "Resting Dormitories are on the Second Floor, with AC and non-AC sleeping berths.";
+  }
+  if (has("lost", "found", "missing", "baggage", "luggage")) {
+    return "Report lost baggage at the Lost & Found Center on the Second Floor. Keep your ticket and a description of the item ready.";
   }
 
-  if (query.includes("atm") || query.includes("cash") || query.includes("money")) {
-    return "A State Bank ATM is fully active on the Ground Floor near the exit gates. It supports cash withdrawals and is open 24/7.";
-  }
-
-  if (query.includes("waiting") || query.includes("lounge")) {
-    return "We have two main waiting halls: the General Waiting Room located on the Ground Floor (GF), and the premium Executive VIP Lounge located on the First Floor (FF) with luxury sofa seating and refreshments.";
-  }
-
-  if (query.includes("charge") || query.includes("charging")) {
-    return "To charge your electronic devices, navigate to Charging Point Station B located on the First Floor (FF), which provides 6 high-speed USB power docks and multi-pin plugs.";
-  }
-
-  if (query.includes("stair") || query.includes("stairs") || query.includes("escalator")) {
-    return "To travel between levels, use the Platform 6 Stairs which has an adjacent escalator running upwards continuously, located on the First Floor (FF).";
-  }
-
-  if (query.includes("water") || query.includes("drinking")) {
-    return "A cold RO drinking water kiosk is available at the Water Purifier Station located on the First Floor (FF), providing free pure drinking water.";
-  }
-
-  if (query.includes("police") || query.includes("rpf") || query.includes("security") || query.includes("sos") || query.includes("emergency")) {
-    return "⚠️ EMERGENCY ASSISTANCE: The Railway Police Office (RPF booth) is located on the Second Floor (SF), providing 24/7 security assistance. You can also dial 139 for central railway helpline.";
-  }
-
-  if (query.includes("dormitory") || query.includes("dormitories") || query.includes("sleeping") || query.includes("bed")) {
-    return "Clean sleeping berths can be booked at the Resting Dormitories located on the Second Floor (SF). Options include both AC deluxe and non-AC single beds.";
-  }
-
-  if (query.includes("lost") || query.includes("found") || query.includes("missing") || query.includes("baggage")) {
-    return "If you lost any item or baggage, report it immediately to the Lost & Found Center located on the Second Floor (SF).";
-  }
-
-  return "I'm RailNav AI, your station guide. I can help you find Platform 5, Platform 4, Restroom Block A, IRCTC Food Court, Ticket Counter North, State Bank ATM, General Waiting Room, Executive VIP Lounge, and security centers. What can I find for you?";
+  return `I understood that you asked about “${prompt.trim()}”. I can answer station-navigation questions about platforms, facilities, routes, accessibility, trains, and emergencies. Try asking “Where is the nearest restroom?” or “How do I reach Platform 8?”`;
 }
 
 // Resilient Gemini generator with auto-retry and fallback model support
@@ -302,7 +305,7 @@ async function generateWithFallback(ai: GoogleGenAI, message: string, systemProm
 app.post(["/api/chat", "/ai/chat"], async (req, res) => {
   try {
     const { message } = req.body;
-    if (!message) {
+    if (typeof message !== "string" || !message.trim()) {
       res.status(400).json({ error: "Message parameter is required." });
       return;
     }

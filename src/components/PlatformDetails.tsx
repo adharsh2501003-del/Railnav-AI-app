@@ -105,6 +105,12 @@ export default function PlatformDetails({ isDarkMode, onStartNavigation }: Platf
   };
 
   const activeData = platformsData[selectedPlat] || platformsData['5'];
+  const platformMetadata: Record<string, { length: string; zone: string; boarding: string; accessibility: string; safety: string }> = {
+    '1': { length: '420 m', zone: 'Main concourse · North zone', boarding: 'Board near the central footbridge', accessibility: 'Lift A and tactile guidance available', safety: 'Low crowd; ideal for families and luggage' },
+    '5': { length: '510 m', zone: 'Main concourse · Central zone', boarding: 'Board near coach markers C2–C4', accessibility: 'Lift B, ramp access, and accessible restroom nearby', safety: 'Medium crowd; keep to the marked pedestrian lane' },
+    '8': { length: '560 m', zone: 'East concourse · South zone', boarding: 'Board near the east footbridge', accessibility: 'Lift D available; request staff assistance at the help point', safety: 'Heavy crowd; allow extra walking time' },
+  };
+  const metadata = platformMetadata[selectedPlat] || platformMetadata['5'];
 
   return (
     <div
@@ -137,6 +143,24 @@ export default function PlatformDetails({ isDarkMode, onStartNavigation }: Platf
               >
                 P{pNum}
               </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="px-5 py-2">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 text-left mb-2">Platform Operations</h3>
+          <div className="grid grid-cols-2 gap-2 text-left">
+            {[
+              ['Platform length', metadata.length],
+              ['Station zone', metadata.zone],
+              ['Boarding point', metadata.boarding],
+              ['Accessibility', metadata.accessibility],
+              ['Safety guidance', metadata.safety],
+            ].map(([label, value]) => (
+              <div key={label} className="bento-card bg-white dark:bg-slate-900 p-3 last:col-span-2">
+                <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400">{label}</span>
+                <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 mt-1">{value}</p>
+              </div>
             ))}
           </div>
         </div>
