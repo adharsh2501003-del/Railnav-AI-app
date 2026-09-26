@@ -19,7 +19,7 @@ import EmergencyScreen from './components/EmergencyScreen';
 import NotificationsScreen from './components/NotificationsScreen';
 import ProfileScreen from './components/ProfileScreen';
 import { getNotifications, subscribeToLiveEvents, triggerSOS } from './api/client';
-import { t } from './i18n';
+import { LanguageContext, t } from './i18n';
 import { STATION_DESTINATIONS } from './data';
 
 export default function App() {
@@ -27,6 +27,7 @@ export default function App() {
   const [screen, setScreen] = useState<string>('splash');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   const [userLoggedIn, setUserLoggedIn] = useState<boolean>(false);
+  const [isGuest, setIsGuest] = useState<boolean>(false);
   const [userName, setUserName] = useState<string>('Adharsh');
   const [userPhone, setUserPhone] = useState<string>('+91 9876543210');
   const kioskMode = import.meta.env.VITE_KIOSK_MODE === 'true' || new URLSearchParams(window.location.search).has('kiosk');
@@ -91,13 +92,19 @@ export default function App() {
   ]);
 
   // Voice Speech Synthesis Helper
-  const handleSpeakText = (text: string) => {
-    if (!accessibility.voiceGuidance) return;
+  const handleSpeakText = (text: string, force = false) => {
+    if (!accessibility.voiceGuidance && !force) return;
     try {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel(); // Cancel active speech
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = accessibility.language === 'hi' ? 'hi-IN' : accessibility.language === 'bn' ? 'bn-IN' : 'en-IN';
+        utterance.lang = accessibility.language === 'hi'
+          ? 'hi-IN'
+          : accessibility.language === 'bn'
+            ? 'bn-IN'
+            : accessibility.language === 'ta'
+              ? 'ta-IN'
+              : 'en-IN';
         utterance.rate = 1.0;
         utterance.pitch = 1.0;
         window.speechSynthesis.speak(utterance);
@@ -181,7 +188,9 @@ export default function App() {
       setSelectedMapDestination(destination || null);
       setSelectedMapRoute(Boolean(destination));
       setScreen('map');
-      handleSpeakText(`Routing you to ${destination?.label || `the nearest ${mapFilter}`}.`);
+      if (destination) {
+        handleSpeakText(`Starting navigation to ${destination.label}. Follow the highlighted route.`, true);
+      }
     } else if (actionId === 'police' || actionId === 'medical') {
       setScreen('emergency');
     } else if (actionId === 'platform') {
@@ -195,12 +204,13 @@ export default function App() {
     setSelectedMapFilter('platforms');
     setSelectedMapRoute(true);
     setScreen('map');
-    handleSpeakText(`Directing you to platform ${train.platform} for ${train.name}. Total distance is one hundred and eighty meters.`);
+    handleSpeakText(`Starting navigation to platform ${train.platform} for ${train.name}. Follow the highlighted route.`, true);
   };
 
   const handleLoginSuccess = (name: string, phone: string) => {
     setUserName(name);
     setUserPhone(phone);
+    setIsGuest(phone === 'Unregistered Guest');
     setUserLoggedIn(true);
     setScreen('dashboard');
     handleSpeakText(`Welcome to RailNav AI, ${name}. Your ticket details for NDLS Shatabdi Express are synchronized.`);
@@ -208,6 +218,7 @@ export default function App() {
 
   const handleLogout = () => {
     setUserLoggedIn(false);
+    setIsGuest(false);
     setScreen('login');
   };
 
@@ -226,6 +237,7 @@ export default function App() {
   }`;
 
   return (
+    <LanguageContext.Provider value={accessibility.language as 'en' | 'hi' | 'bn' | 'ta'}>
     <DeviceFrame
       activeScreen={screen}
       setScreen={setScreen}
@@ -269,7 +281,10 @@ export default function App() {
           {screen === 'dashboard' && (
             <HomeDashboard
               userName={userName}
+              isGuest={isGuest}
               isDarkMode={isDarkMode}
+              language={accessibility.language as 'en' | 'hi' | 'bn' | 'ta'}
+              onLanguageChange={(language) => setAccessibility((previous) => ({ ...previous, language }))}
               onSearchFocus={() => setScreen('assistant')}
               onQuickAction={handleQuickAction}
               onNavigateTrain={handleNavigateTrain}
@@ -284,16 +299,15 @@ export default function App() {
               preselectedFilter={selectedMapFilter}
               preselectedRoute={selectedMapRoute}
               preselectedDestination={selectedMapDestination}
-              onSpeak={handleSpeakText}
-              onStartNavigation={() => {
-                handleSpeakText("Wayfinding started. Walk forward forty meters, then take the main escalator on your left to the overbridge.");
-              }}
+              onSpeak={(text) => handleSpeakText(text, true)}
+              onStartNavigation={() => undefined}
             />
           )}
 
           {screen === 'assistant' && (
             <AIAssistant
               isDarkMode={isDarkMode}
+              onSpeak={handleSpeakText}
               onNavigateToFacility={(fac) => {
                 setSelectedMapFilter(fac);
                 setSelectedMapRoute(false);
@@ -305,7 +319,7 @@ export default function App() {
                 setSelectedMapFilter('');
                 setSelectedMapRoute(true);
                 setScreen('map');
-                handleSpeakText(`Routing you to ${place.label}. Following accessibility directions.`);
+                handleSpeakText(`Starting navigation to ${place.label}. Follow the highlighted route.`, true);
               }}
             />
           )}
@@ -318,6 +332,7 @@ export default function App() {
                 setSelectedMapRoute(true);
                 setSelectedMapDestination(STATION_DESTINATIONS.find((item) => item.label === 'Platform 5') || null);
                 setScreen('map');
+                handleSpeakText('Starting navigation to Platform 5. Follow the highlighted route.', true);
               }}
             />
           )}
@@ -344,6 +359,7 @@ export default function App() {
                 setSelectedMapFilter('platforms');
                 setSelectedMapRoute(true);
                 setScreen('map');
+                handleSpeakText('Starting navigation to Platform 5. Follow the highlighted route.', true);
               }}
             />
           )}
@@ -352,6 +368,7 @@ export default function App() {
             <ProfileScreen
               userName={userName}
               userPhone={userPhone}
+              isGuest={isGuest}
               isDarkMode={isDarkMode}
               setIsDarkMode={setIsDarkMode}
               accessibility={accessibility}
@@ -368,12 +385,12 @@ export default function App() {
             isDarkMode ? 'bg-slate-950' : 'bg-white'
           }`}>
             {[
-              { id: 'dashboard', label: 'Home', icon: <Home className="w-5 h-5" /> },
-              { id: 'map', label: 'Map', icon: <Map className="w-5 h-5" /> },
-              { id: 'assistant', label: 'Copilot', icon: <MessageSquare className="w-5 h-5" /> },
-              { id: 'platform', label: 'Platform', icon: <Layers className="w-5 h-5" /> },
-              { id: 'emergency', label: 'Emergency', icon: <ShieldAlert className="w-5 h-5" /> },
-              { id: 'profile', label: 'Profile', icon: <User className="w-5 h-5" /> }
+              { id: 'dashboard', label: t(accessibility.language, 'homeTab'), icon: <Home className="w-5 h-5" /> },
+              { id: 'map', label: t(accessibility.language, 'mapTab'), icon: <Map className="w-5 h-5" /> },
+              { id: 'assistant', label: t(accessibility.language, 'assistantTab'), icon: <MessageSquare className="w-5 h-5" /> },
+              { id: 'platform', label: t(accessibility.language, 'platformTab'), icon: <Layers className="w-5 h-5" /> },
+              { id: 'emergency', label: t(accessibility.language, 'emergencyTab'), icon: <ShieldAlert className="w-5 h-5" /> },
+              { id: 'profile', label: t(accessibility.language, 'profileTab'), icon: <User className="w-5 h-5" /> }
             ].map((tab) => {
               const isActive = screen === tab.id;
               return (
@@ -407,5 +424,6 @@ export default function App() {
         )}
       </div>
     </DeviceFrame>
+    </LanguageContext.Provider>
   );
 }

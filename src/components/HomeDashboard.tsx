@@ -6,10 +6,14 @@ import {
   DollarSign, Coffee, ArrowUpDown, Bath
 } from 'lucide-react';
 import { Train as TrainType } from '../types';
+import { Language, t } from '../i18n';
 
 interface HomeDashboardProps {
   userName: string;
+  isGuest: boolean;
   isDarkMode: boolean;
+  language: Language;
+  onLanguageChange: (language: Language) => void;
   onSearchFocus: () => void;
   onQuickAction: (actionId: string) => void;
   onNavigateTrain: (train: TrainType) => void;
@@ -19,7 +23,10 @@ interface HomeDashboardProps {
 
 export default function HomeDashboard({
   userName,
+  isGuest,
   isDarkMode,
+  language,
+  onLanguageChange,
   onSearchFocus,
   onQuickAction,
   onNavigateTrain,
@@ -75,29 +82,43 @@ export default function HomeDashboard({
       <div className="p-5 pb-2 flex items-center justify-between">
         <div className="text-left">
           <span className="text-xs text-slate-400 dark:text-slate-500 font-semibold block uppercase tracking-wide">
-            Welcome back
+            {t(language, 'welcome')}
           </span>
           <h2 className="text-xl font-bold tracking-tight">
             Good Morning, {userName} 👋
           </h2>
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            Where are you going today?
+            {t(language, 'going')}
           </p>
         </div>
 
-        {/* Notifications Icon Badge */}
-        <button
-          id="btn-dash-notifications"
-          onClick={() => setScreen('notifications')}
-          className="relative w-11 h-11 rounded-[16px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center hover:bg-slate-50 transition shadow-sm"
-        >
-          <Bell className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-          {activeNotificationsCount > 0 && (
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center border-2 border-white dark:border-slate-900 animate-bounce">
-              {activeNotificationsCount}
-            </span>
-          )}
-        </button>
+        <div className="flex items-center gap-2">
+          <label className="sr-only" htmlFor="dashboard-language">{t(language, 'language')}</label>
+          <select
+            id="dashboard-language"
+            value={language}
+            onChange={(event) => onLanguageChange(event.target.value as Language)}
+            className="h-10 max-w-[92px] rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2 text-[10px] font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            aria-label={t(language, 'language')}
+          >
+            <option value="en">English</option>
+            <option value="hi">हिन्दी</option>
+            <option value="bn">বাংলা</option>
+            <option value="ta">தமிழ்</option>
+          </select>
+          <button
+            id="btn-dash-notifications"
+            onClick={() => setScreen('notifications')}
+            className="relative w-11 h-11 rounded-[16px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center hover:bg-slate-50 transition shadow-sm"
+          >
+            <Bell className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+            {activeNotificationsCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center border-2 border-white dark:border-slate-900 animate-bounce">
+                {activeNotificationsCount}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Floating Search Bar */}
@@ -111,7 +132,7 @@ export default function HomeDashboard({
             id="dash-search-input"
             type="text"
             readOnly
-            placeholder="Search platform, restroom, food court..."
+            placeholder={t(language, 'search')}
             value={searchQuery}
             className="bg-transparent text-xs font-medium w-full focus:outline-none pointer-events-none text-slate-600 dark:text-slate-300"
           />
@@ -123,7 +144,7 @@ export default function HomeDashboard({
       <div className="px-5 py-2">
         <div className="flex items-center justify-between mb-3 text-left">
           <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-            Quick Actions
+            {t(language, 'quickActions')}
           </h3>
           <span className="text-[10px] text-blue-600 dark:text-blue-400 font-extrabold bg-blue-50 dark:bg-slate-900 px-2 py-0.5 rounded-md">
             12 Stations
@@ -208,7 +229,7 @@ export default function HomeDashboard({
         </div>
 
         {/* Coach Position Bento Widget */}
-        <div className="bento-card bg-gradient-to-br from-blue-600 to-blue-800 text-white border-none p-5 flex flex-col justify-between mb-4">
+        <div className="coach-layout-card bento-card text-white border-none p-5 flex flex-col justify-between mb-4">
           <div className="mb-3 text-left">
             <h4 className="text-[10px] font-bold uppercase opacity-80 tracking-wider">Coach Layout Position</h4>
             <p className="text-base font-bold mt-1">
@@ -244,7 +265,7 @@ export default function HomeDashboard({
       </div>
 
       {/* Tips & Crowd Advisory Bento Monitor */}
-      <div className="px-5 py-2 mb-4">
+      {!isGuest && <div className="px-5 py-2 mb-4">
         <div className="bento-card bg-slate-900 dark:bg-slate-950 text-white border-none p-5">
           <div className="flex justify-between items-center mb-3">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -276,7 +297,7 @@ export default function HomeDashboard({
             </p>
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

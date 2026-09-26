@@ -4,6 +4,7 @@ import {
   Check, Eye, HelpCircle, Volume2, Accessibility, MapPin, Compass, Flame
 } from 'lucide-react';
 import { AccessibilitySettings } from '../types';
+import { useLanguage, t } from '../i18n';
 
 interface EmergencyScreenProps {
   isDarkMode: boolean;
@@ -20,6 +21,7 @@ export default function EmergencyScreen({
   onSpeakText,
   onTriggerSOS,
 }: EmergencyScreenProps) {
+  const language = useLanguage();
   const [activeTab, setActiveTab] = useState<'emergency' | 'accessibility'>('emergency');
   const [sosTriggered, setSosTriggered] = useState(false);
   const [sosOption, setSosOption] = useState<string | null>(null);
@@ -223,7 +225,7 @@ export default function EmergencyScreen({
 
             {/* Language Dropdown Selector */}
             <div className="space-y-1.5">
-              <label htmlFor="lang-select" className="text-xs font-bold text-slate-500 dark:text-slate-400">Language Selection (multilingual)</label>
+              <label htmlFor="lang-select" className="text-xs font-bold text-slate-500 dark:text-slate-400">{t(language, 'language')}</label>
               <div className="relative">
                 <select
                   id="lang-select"

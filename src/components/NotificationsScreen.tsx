@@ -4,6 +4,7 @@ import {
   Clock, ArrowLeftRight, Megaphone, Trash2 
 } from 'lucide-react';
 import { AppNotification } from '../types';
+import { useLanguage, t } from '../i18n';
 
 interface NotificationsScreenProps {
   isDarkMode: boolean;
@@ -20,6 +21,7 @@ export default function NotificationsScreen({
   onClearNotification,
   onNavigateToRoute,
 }: NotificationsScreenProps) {
+  const language = useLanguage();
 
   const getNotificationStyles = (type: string) => {
     switch (type) {
@@ -71,7 +73,7 @@ export default function NotificationsScreen({
           <span className="text-[10px] text-blue-600 dark:text-blue-400 font-extrabold tracking-wider uppercase block">
             STATION BROADCASTS
           </span>
-          <h2 className="text-xl font-bold tracking-tight">Active Notifications</h2>
+          <h2 className="text-xl font-bold tracking-tight">{t(language, 'notificationsTab')}</h2>
           <p className="text-[10px] text-slate-400">
             {unreadCount} unread announcements
           </p>

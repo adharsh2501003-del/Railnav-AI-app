@@ -5,14 +5,17 @@ import {
 } from 'lucide-react';
 import { ChatMessage } from '../types';
 import { STATION_DESTINATIONS, StationDestination } from '../data';
+import { useLanguage, t } from '../i18n';
 
 interface AIAssistantProps {
   isDarkMode: boolean;
   onNavigateToFacility: (facilityId: string) => void;
   onNavigateToPlace?: (place: StationDestination) => void;
+  onSpeak?: (text: string) => void;
 }
 
-export default function AIAssistant({ isDarkMode, onNavigateToFacility, onNavigateToPlace }: AIAssistantProps) {
+export default function AIAssistant({ isDarkMode, onNavigateToFacility, onNavigateToPlace, onSpeak }: AIAssistantProps) {
+  const language = useLanguage();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'msg-init',
@@ -75,6 +78,7 @@ export default function AIAssistant({ isDarkMode, onNavigateToFacility, onNaviga
       };
 
       setMessages(prev => [...prev, assistantMsg]);
+      onSpeak?.(data.text);
     } catch (err) {
       console.error('Error connecting to Gemini backend:', err);
       // Failover response
@@ -85,6 +89,7 @@ export default function AIAssistant({ isDarkMode, onNavigateToFacility, onNaviga
         timestamp: new Date()
       };
       setMessages(prev => [...prev, assistantMsg]);
+      onSpeak?.(assistantMsg.text);
     } finally {
       setIsTyping(false);
     }
@@ -147,7 +152,7 @@ export default function AIAssistant({ isDarkMode, onNavigateToFacility, onNaviga
             <Sparkles className="w-4 h-4 animate-spin" style={{ animationDuration: '6s' }} />
           </div>
           <div className="text-left">
-            <h3 className="text-xs font-bold leading-tight">RailNav Copilot</h3>
+            <h3 className="text-xs font-bold leading-tight">{t(language, 'aiAssistant')}</h3>
             <span className="text-[9px] text-emerald-green font-bold flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-green animate-ping"></span> Gemini Connected
             </span>
@@ -182,7 +187,20 @@ export default function AIAssistant({ isDarkMode, onNavigateToFacility, onNaviga
                   ? 'bg-emerald-600 text-white rounded-tr-none' 
                   : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-300 rounded-tl-none shadow-sm'
               }`}>
-                {msg.text}
+                <div className="flex items-start gap-2">
+                  <span className="flex-1">{msg.text}</span>
+                  {!isUser && onSpeak && (
+                    <button
+                      type="button"
+                      onClick={() => onSpeak(msg.text)}
+                      className="shrink-0 p-1 rounded-md text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800"
+                      aria-label={t(language, 'readAloud')}
+                      title={t(language, 'readAloud')}
+                    >
+                      <Volume2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
 
                 {/* Map option shortcut cards within the chat box bubble */}
                 {!isUser && (() => {

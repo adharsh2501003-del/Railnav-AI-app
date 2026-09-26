@@ -17,6 +17,53 @@ body {
   overflow-x: hidden;
 }
 
+/* Keep every neutral text utility readable on both light and dark surfaces. */
+.text-slate-300,
+.text-slate-400,
+.text-slate-500 {
+  color: #334155 !important;
+}
+
+.text-slate-600 {
+  color: #1e293b !important;
+}
+
+.text-slate-700,
+.text-slate-800,
+.text-slate-900,
+.text-slate-950 {
+  color: #0f172a !important;
+}
+
+.dark .text-slate-300,
+.dark .text-slate-400,
+.dark .text-slate-500 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-slate-600 {
+  color: #e2e8f0 !important;
+}
+
+.dark .text-slate-700,
+.dark .text-slate-800,
+.dark .text-slate-900,
+.dark .text-slate-950 {
+  color: #f8fafc !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #475569;
+  opacity: 1;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #cbd5e1;
+  opacity: 1;
+}
+
 /* Bento Grid Theme Styles */
 .bento-card {
   background: white;
@@ -31,6 +78,46 @@ body {
   background: #0f172a; /* Slate 900 */
   border-color: #1e293b; /* Slate 800 */
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+}
+
+.coach-layout-card {
+  background: linear-gradient(135deg, #1d4ed8, #1e3a8a) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+}
+
+.coach-layout-card .text-white {
+  color: #ffffff !important;
+}
+
+.coach-layout-card .text-slate-900 {
+  color: #0f172a !important;
+}
+
+.map-3d-surface {
+  transform-style: preserve-3d;
+  transform-origin: center bottom;
+  box-shadow:
+    0 24px 35px -18px rgba(15, 23, 42, 0.55),
+    0 8px 16px -10px rgba(30, 64, 175, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+.map-3d-surface::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 34%, rgba(15, 23, 42, 0.08));
+  z-index: 2;
+}
+
+.station-map-svg {
+  filter: drop-shadow(0 1px 0 rgba(15, 23, 42, 0.18));
+}
+
+.dark .map-3d-surface::after {
+  background: linear-gradient(145deg, rgba(148, 163, 184, 0.12), transparent 34%, rgba(2, 6, 23, 0.24));
 }
 
 .bento-card:hover {

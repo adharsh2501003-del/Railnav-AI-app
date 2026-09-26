@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { STATION_DESTINATIONS } from '../data';
 import { getFacilities } from '../api/client';
+import { useLanguage, t } from '../i18n';
 
 interface StationMapProps {
   isDarkMode: boolean;
@@ -29,6 +30,7 @@ export default function StationMap({
   onSpeak,
   preselectedDestination = null,
 }: StationMapProps) {
+  const language = useLanguage();
   const [currentFloor, setCurrentFloor] = useState('GF'); // 'GF' | 'FF' | 'SF'
   const [zoomLevel, setZoomLevel] = useState(1);
   const [selectedLayers, setSelectedLayers] = useState<string[]>(
@@ -74,6 +76,7 @@ export default function StationMap({
   const [navPlaying, setNavPlaying] = useState(true);
   const [bottomSheetMinimized, setBottomSheetMinimized] = useState(false);
   const [stationDestinations, setStationDestinations] = useState(STATION_DESTINATIONS);
+  const spokenNavigationPhase = useRef<number | null>(null);
 
   useEffect(() => {
     getFacilities('ndls').then((items) => {
@@ -223,12 +226,16 @@ export default function StationMap({
   // Select new wayfinding destination starting from the passenger's actual current location
   const handleSelectNewDestination = (newDest: typeof selectedDestination) => {
     const passengerLoc = getCurrentPassengerPosition();
+    onSpeak?.(`Starting navigation from ${passengerLoc.label} to ${newDest.label}. Follow the highlighted route.`);
     setStartLocation(passengerLoc);
     setSelectedDestination(newDest);
     setCurrentFloor(passengerLoc.floor);
-    setNavigationActive(false);
+    setNavigationActive(true);
     setNavProgress(0);
     setNavPlaying(true);
+    setBottomSheetMinimized(true);
+    spokenNavigationPhase.current = 0;
+    onStartNavigation();
   };
 
   // Auto trigger minimization if starting navigation with a preselected route or synced destination
@@ -243,6 +250,7 @@ export default function StationMap({
       setNavPlaying(true);
       if (preselectedRoute) {
         setBottomSheetMinimized(true);
+        spokenNavigationPhase.current = null;
       } else {
         setBottomSheetMinimized(false);
       }
@@ -279,13 +287,6 @@ export default function StationMap({
       }
     }
   }, [navProgress, navigationActive]);
-
-  useEffect(() => {
-    if (!navigationActive || !onSpeak || !selectedDestination) return;
-    if (navProgress === 1) onSpeak(`Walk toward ${selectedDestination.label}.`);
-    if (navProgress === 50) onSpeak(`Continue to ${selectedDestination.label}.`);
-    if (navProgress === 100) onSpeak(`You have arrived at ${selectedDestination.label}.`);
-  }, [navProgress, navigationActive, onSpeak, selectedDestination]);
 
   // Construct SVG path string for segments located strictly on the specified floor
   const getSVGPathD = (floor: string) => {
@@ -397,6 +398,23 @@ export default function StationMap({
   };
 
   const navInstruction = getNavigationInstruction(navProgress);
+
+  useEffect(() => {
+    if (!navigationActive || !onSpeak || !selectedDestination) return;
+
+    const phase = navProgress >= 100 ? 100 : navProgress >= 75 ? 75 : navProgress >= 50 ? 50 : navProgress >= 25 ? 25 : 0;
+    if (spokenNavigationPhase.current === phase) return;
+    if (phase === 0 && preselectedRoute) {
+      spokenNavigationPhase.current = phase;
+      return;
+    }
+    spokenNavigationPhase.current = phase;
+
+    const spokenInstruction = phase === 100
+      ? `You have arrived at ${selectedDestination.label}.`
+      : `${navInstruction.text}. ${navInstruction.sub}.`;
+    onSpeak(spokenInstruction);
+  }, [navInstruction, navProgress, navigationActive, onSpeak, selectedDestination]);
 
   const layerOptions = [
     { id: 'platforms', label: 'Platforms', color: 'border-blue-500 text-blue-600 bg-blue-50/45 dark:bg-blue-950/20' },
@@ -521,10 +539,7 @@ export default function StationMap({
           <div className="flex-1 h-11 bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 flex items-center gap-2.5 shadow-md">
             <Compass className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 animate-pulse" />
             <span className="text-xs font-semibold truncate dark:text-white">
-              New Delhi Station Complex
-            </span>
-            <span className="ml-auto text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md font-mono text-slate-500 font-bold">
-              GPS: Live
+              {t(language, 'stationComplex')}
             </span>
           </div>
 
@@ -635,9 +650,9 @@ export default function StationMap({
       >
         {/* Render Vector Map Base layout inside SVG */}
         <div 
-          className="w-[360px] h-[480px] bg-white dark:bg-slate-900 rounded-3xl relative shadow-inner overflow-hidden border border-slate-200 dark:border-slate-800"
+          className="map-3d-surface w-[360px] h-[480px] bg-white dark:bg-slate-900 rounded-3xl relative shadow-inner overflow-hidden border border-slate-200 dark:border-slate-800"
           style={{
-            transform: `translate(${mapCenter.x}px, ${mapCenter.y}px) scale(${zoomLevel})`,
+            transform: `perspective(900px) rotateX(7deg) translate(${mapCenter.x}px, ${mapCenter.y}px) scale(${zoomLevel})`,
             transition: 'transform 0.25s cubic-bezier(0.1, 0.8, 0.2, 1)'
           }}
         >
@@ -645,7 +660,7 @@ export default function StationMap({
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:24px_24px] opacity-40"></div>
 
           {/* SVG Map Layout Lines */}
-          <svg className="absolute inset-0 w-full h-full" viewBox="0 0 360 480" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <svg className="station-map-svg absolute inset-0 w-full h-full" viewBox="0 0 360 480" fill="none" xmlns="http://www.w3.org/2000/svg">
             {/* Outline structural layout of Station Rooms depending on Floor */}
             {currentFloor === 'GF' && (
               <>
@@ -792,9 +807,13 @@ export default function StationMap({
                     id={`btn-map-navigate-popup-${i}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setNavigationActive(true);
-                      setBottomSheetMinimized(true);
-                      onStartNavigation();
+                      handleSelectNewDestination({
+                        label: marker.label,
+                        x: marker.x,
+                        y: marker.y,
+                        details: marker.details,
+                        floor: currentFloor
+                      });
                     }}
                     className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black px-3 py-1.5 rounded-lg shadow-xl flex items-center gap-1 cursor-pointer animate-bounce whitespace-nowrap border border-blue-400/40 z-20 transition active:scale-95"
                     style={{ animationDuration: '2s' }}

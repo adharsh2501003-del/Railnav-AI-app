@@ -5,10 +5,12 @@ import {
   Cpu, Smartphone, Layers
 } from 'lucide-react';
 import { AccessibilitySettings } from '../types';
+import { useLanguage, t } from '../i18n';
 
 interface ProfileScreenProps {
   userName: string;
   userPhone: string;
+  isGuest: boolean;
   isDarkMode: boolean;
   setIsDarkMode: (dark: boolean) => void;
   accessibility: AccessibilitySettings;
@@ -20,6 +22,7 @@ interface ProfileScreenProps {
 export default function ProfileScreen({
   userName,
   userPhone,
+  isGuest,
   isDarkMode,
   setIsDarkMode,
   accessibility,
@@ -27,6 +30,7 @@ export default function ProfileScreen({
   setScreen,
   screensList,
 }: ProfileScreenProps) {
+  const language = useLanguage();
   const [downloadingMap, setDownloadingMap] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [mapDownloaded, setMapDownloaded] = useState(false);
@@ -158,7 +162,7 @@ export default function ProfileScreen({
         </div>
 
         {/* MVP Sandbox Simulator Controls */}
-        <div className="space-y-2">
+        {!isGuest && <div className="space-y-2">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 text-left">
             Developer Simulation Control
           </h3>
@@ -191,7 +195,7 @@ export default function ProfileScreen({
               ))}
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Global UI Preference Switches */}
         <div className="space-y-2">
@@ -298,7 +302,7 @@ export default function ProfileScreen({
             className="w-full flex items-center gap-3 text-rose-500 font-bold hover:bg-rose-50/20 py-1 cursor-pointer"
           >
             <LogOut className="w-4 h-4 shrink-0" />
-            <span>Logout Account</span>
+            <span>{language === 'en' ? 'Logout Account' : t(language, 'profileTab')}</span>
           </button>
         </div>
       </div>

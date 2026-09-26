@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLanguage, t } from '../i18n';
 import { 
   Compass, AlertTriangle, MapPin, Eye, Info, Clock, 
   Sparkles, ShieldCheck, Footprints, Flame, HelpCircle 
@@ -10,6 +11,7 @@ interface PlatformDetailsProps {
 }
 
 export default function PlatformDetails({ isDarkMode, onStartNavigation }: PlatformDetailsProps) {
+  const language = useLanguage();
   const [selectedPlat, setSelectedPlat] = useState('5');
 
   // Sample data for different platforms
@@ -124,7 +126,7 @@ export default function PlatformDetails({ isDarkMode, onStartNavigation }: Platf
         <div className="flex items-center justify-between mb-3 text-left">
           <div>
             <span className="text-[10px] text-blue-600 dark:text-blue-400 font-extrabold tracking-wider uppercase block">
-              STATION PLATFORM DIRECTORY
+              {t(language, 'platformDetails')}
             </span>
             <h2 className="text-xl font-bold tracking-tight">Platform {selectedPlat} Details</h2>
           </div>
@@ -148,7 +150,7 @@ export default function PlatformDetails({ isDarkMode, onStartNavigation }: Platf
         </div>
 
         <div className="px-5 py-2">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 text-left mb-2">Platform Operations</h3>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 text-left mb-2">{t(language, 'platformOperations')}</h3>
           <div className="grid grid-cols-2 gap-2 text-left">
             {[
               ['Platform length', metadata.length],
